@@ -1,0 +1,10 @@
+**/node_modules/
+**/out/
+**/dist/
+*.log
+**/github-desktop-ui.txt
+
+/.agents/
+/.cliagent-room/
+/.codex/
+/.mcp.json
