@@ -25,13 +25,21 @@ export interface FileEntry {
 
 export interface TerminalAttachment {
   repositoryId: number
+  terminalId: number
   shellName: string
   bufferedOutput: string
   outputOffset: number
+  terminals: TerminalTab[]
+}
+
+export interface TerminalTab {
+  id: number
+  shellName: string
 }
 
 export interface TerminalData {
   repositoryId: number
+  terminalId: number
   data: string
   offset: number
 }
@@ -43,9 +51,11 @@ export interface CompanionApi {
   openFile(relativePath: string): Promise<string>
   showInExplorer(relativePath: string): Promise<void>
   openRepositoryInExplorer(): Promise<void>
-  attachTerminal(columns: number, rows: number): Promise<TerminalAttachment>
-  writeTerminal(repositoryId: number, data: string): void
-  resizeTerminal(repositoryId: number, columns: number, rows: number): void
+  attachTerminal(terminalId: number | undefined, columns: number, rows: number): Promise<TerminalAttachment>
+  createTerminal(columns: number, rows: number): Promise<TerminalAttachment>
+  closeTerminal(terminalId: number, columns: number, rows: number): Promise<TerminalAttachment>
+  writeTerminal(terminalId: number, data: string): void
+  resizeTerminal(terminalId: number, columns: number, rows: number): void
   onTerminalData(listener: (event: TerminalData) => void): () => void
   readClipboardText(): Promise<string>
   launchGitHubDesktopFast(): Promise<void>

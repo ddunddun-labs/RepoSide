@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import { useEffect, useRef, useState } from 'react'
-import type { RepositoryState, TerminalData } from '../shared/types'
+import type { RepositoryState, TerminalData, TerminalTab } from '../shared/types'
 import { TerminalIcon } from './icons'
 
 interface TerminalPanelProps {
@@ -10,10 +10,23 @@ interface TerminalPanelProps {
 
 export function TerminalPanel({ repository }: TerminalPanelProps) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const [shellName, setShellName] = useState('PowerShell')
+  const lastRepositoryId = useRef<number | undefined>(undefined)
+  const terminalSize = useRef({ columns: 80, rows: 24 })
+  const [terminals, setTerminals] = useState<TerminalTab[]>([])
+  const [activeTerminalId, setActiveTerminalId] = useState<number>()
 
   useEffect(() => {
-    if (!repository || !hostRef.current) return
+    if (!repository || !hostRef.current) {
+      setTerminals([])
+      setActiveTerminalId(undefined)
+      return
+    }
+
+    const repositoryChanged = lastRepositoryId.current !== repository.id
+    lastRepositoryId.current = repository.id
+    const requestedTerminalId = repositoryChanged ? undefined : activeTerminalId
+    if (repositoryChanged) setTerminals([])
+    let cancelled = false
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -80,16 +93,22 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
       outputOffset = eventEnd
     }
     const dataDisposable = terminal.onData(data => {
-      if (attached) window.companion.writeTerminal(repository.id, data)
+      if (attached && activeTerminalId !== undefined) {
+        window.companion.writeTerminal(activeTerminalId, data)
+      }
     })
     const unsubscribe = window.companion.onTerminalData(event => {
-      if (event.repositoryId === repository.id) writeOutput(event)
+      if (
+        event.repositoryId === repository.id &&
+        event.terminalId === activeTerminalId
+      ) writeOutput(event)
     })
     const resizeObserver = new ResizeObserver(() => {
       try {
         fitAddon.fit()
+        terminalSize.current = { columns: terminal.cols, rows: terminal.rows }
         if (attached) {
-          window.companion.resizeTerminal(repository.id, terminal.cols, terminal.rows)
+          window.companion.resizeTerminal(activeTerminalId!, terminal.cols, terminal.rows)
         }
       } catch {
         // The element can briefly have no dimensions while switching repositories.
@@ -99,9 +118,15 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
 
     requestAnimationFrame(() => {
       fitAddon.fit()
-      void window.companion.attachTerminal(terminal.cols, terminal.rows).then(attachment => {
-        if (attachment.repositoryId !== repository.id) return
-        setShellName(attachment.shellName)
+      terminalSize.current = { columns: terminal.cols, rows: terminal.rows }
+      void window.companion.attachTerminal(
+        requestedTerminalId,
+        terminal.cols,
+        terminal.rows
+      ).then(attachment => {
+        if (cancelled || attachment.repositoryId !== repository.id) return
+        setTerminals(attachment.terminals)
+        setActiveTerminalId(attachment.terminalId)
         terminal.write(attachment.bufferedOutput)
         outputOffset = attachment.outputOffset
         for (const event of pendingOutput) writeOutput(event)
@@ -114,18 +139,55 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
     })
 
     return () => {
+      cancelled = true
       attached = false
       resizeObserver.disconnect()
       unsubscribe()
       dataDisposable.dispose()
       terminal.dispose()
     }
-  }, [repository?.id])
+  }, [repository?.id, activeTerminalId])
+
+  const createTerminal = () => {
+    if (!repository) return
+    const { columns, rows } = terminalSize.current
+    void window.companion.createTerminal(columns, rows).then(attachment => {
+      if (attachment.repositoryId !== repository.id) return
+      setTerminals(attachment.terminals)
+      setActiveTerminalId(attachment.terminalId)
+    })
+  }
+
+  const closeTerminal = (terminalId: number) => {
+    if (!repository) return
+    const { columns, rows } = terminalSize.current
+    void window.companion.closeTerminal(terminalId, columns, rows).then(attachment => {
+      if (attachment.repositoryId !== repository.id) return
+      setTerminals(attachment.terminals)
+      setActiveTerminalId(attachment.terminalId)
+    })
+  }
 
   return <div className="terminal-shell">
     <div className="terminal-toolbar">
-      <div className="terminal-tab active"><TerminalIcon size={15} /><span>{shellName}</span></div>
-      <button className="icon-button" title="새 터미널은 다음 버전에서 지원할 거야" disabled>+</button>
+      <div className="terminal-tabs">
+        {terminals.map((item, index) => <div
+          className={`terminal-tab${item.id === activeTerminalId ? ' active' : ''}`}
+          key={item.id}
+        >
+          <button className="terminal-tab-select" onClick={() => setActiveTerminalId(item.id)}>
+            <TerminalIcon size={15} />
+            <span>{terminals.length > 1 ? `${item.shellName} ${index + 1}` : item.shellName}</span>
+          </button>
+          <button
+            className="terminal-tab-close"
+            title="터미널 닫기"
+            aria-label={`${item.shellName} 터미널 닫기`}
+            onClick={() => closeTerminal(item.id)}
+          >×</button>
+        </div>)}
+      </div>
+      <button className="icon-button" title="새 터미널" onClick={createTerminal} disabled={!repository}>+</button>
     </div>
     {repository
       ? <div className="xterm-host" ref={hostRef} />

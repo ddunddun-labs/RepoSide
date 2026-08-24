@@ -12,10 +12,16 @@ const api: CompanionApi = {
   openFile: relativePath => ipcRenderer.invoke('files:open', relativePath),
   showInExplorer: relativePath => ipcRenderer.invoke('files:show-in-explorer', relativePath),
   openRepositoryInExplorer: () => ipcRenderer.invoke('files:open-repository'),
-  attachTerminal: (columns, rows) => ipcRenderer.invoke('terminal:attach', columns, rows),
-  writeTerminal: (repositoryId, data) => ipcRenderer.send('terminal:write', repositoryId, data),
-  resizeTerminal: (repositoryId, columns, rows) => {
-    ipcRenderer.send('terminal:resize', repositoryId, columns, rows)
+  attachTerminal: (terminalId, columns, rows) => {
+    return ipcRenderer.invoke('terminal:attach', terminalId, columns, rows)
+  },
+  createTerminal: (columns, rows) => ipcRenderer.invoke('terminal:create', columns, rows),
+  closeTerminal: (terminalId, columns, rows) => {
+    return ipcRenderer.invoke('terminal:close', terminalId, columns, rows)
+  },
+  writeTerminal: (terminalId, data) => ipcRenderer.send('terminal:write', terminalId, data),
+  resizeTerminal: (terminalId, columns, rows) => {
+    ipcRenderer.send('terminal:resize', terminalId, columns, rows)
   },
   onTerminalData: listener => {
     const handler = (_event: Electron.IpcRendererEvent, data: TerminalData) => listener(data)

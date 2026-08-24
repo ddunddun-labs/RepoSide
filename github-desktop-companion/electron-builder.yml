@@ -1,0 +1,47 @@
+appId: io.github.sysscalper.githubdesktopcompanion
+productName: GitHub Desktop Companion
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: resources/icon.ico
+    to: icon.ico
+  - from: ../LICENSE
+    to: LICENSE.txt
+  - from: scripts/watch-github-desktop-repository.ps1
+    to: scripts/watch-github-desktop-repository.ps1
+
+asarUnpack:
+  - node_modules/node-pty/**/*
+
+npmRebuild: false
+
+win:
+  icon: resources/icon.ico
+  executableName: GitHub Desktop Companion
+  requestedExecutionLevel: asInvoker
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: GitHub Desktop Companion
+  runAfterFinish: true
+
+portable:
+  artifactName: ${productName}-Portable-${version}-${arch}.${ext}

@@ -17,6 +17,7 @@ import { TerminalManager } from './terminal-manager'
 import { GitHubDesktopUiWatcher, type UiWatcherEvent } from './github-desktop-ui-watcher'
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
+const windowsAppId = 'io.github.sysscalper.githubdesktopcompanion'
 const ignoredDirectories = new Set(['.git', 'node_modules'])
 let mainWindow: BrowserWindow | undefined
 let detectorTimer: NodeJS.Timeout | undefined
@@ -27,6 +28,20 @@ let repositoryCache: Awaited<ReturnType<typeof inspectIndexedDbRepositories>> = 
 let lastUiRepositoryName = ''
 const terminalManager = new TerminalManager(() => mainWindow)
 let uiWatcher: GitHubDesktopUiWatcher | undefined
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(windowsAppId)
+}
+
+function getRuntimeResourcePath(relativePath: string) {
+  if (app.isPackaged) return path.join(process.resourcesPath, relativePath)
+  return path.join(app.getAppPath(), 'resources', relativePath)
+}
+
+function getRuntimeScriptPath(fileName: string) {
+  if (app.isPackaged) return path.join(process.resourcesPath, 'scripts', fileName)
+  return path.join(app.getAppPath(), 'scripts', fileName)
+}
 
 async function getStorageSignature(directory: string) {
   const files = (await readdir(directory))
@@ -210,17 +225,35 @@ function registerIpcHandlers() {
     const error = await shell.openPath(resolveRepositoryPath())
     if (error) throw new Error(error)
   })
-  ipcMain.handle('terminal:attach', (_event, columns: number, rows: number) => {
+  ipcMain.handle('terminal:attach', (
+    _event,
+    terminalId: number | undefined,
+    columns: number,
+    rows: number
+  ) => {
     if (!activeRepository) throw new Error('No linked Repository.')
-    return terminalManager.attach(activeRepository, columns, rows)
+    return terminalManager.attach(activeRepository, terminalId, columns, rows)
   })
-  ipcMain.on('terminal:write', (_event, repositoryId: number, data: string) => {
+  ipcMain.handle('terminal:create', (_event, columns: number, rows: number) => {
+    if (!activeRepository) throw new Error('No linked Repository.')
+    return terminalManager.create(activeRepository, columns, rows)
+  })
+  ipcMain.handle('terminal:close', (
+    _event,
+    terminalId: number,
+    columns: number,
+    rows: number
+  ) => {
+    if (!activeRepository) throw new Error('No linked Repository.')
+    return terminalManager.close(activeRepository, terminalId, columns, rows)
+  })
+  ipcMain.on('terminal:write', (_event, terminalId: number, data: string) => {
     if (typeof data !== 'string' || data.length > 64 * 1024) return
-    terminalManager.write(repositoryId, data)
+    terminalManager.write(terminalId, data)
   })
-  ipcMain.on('terminal:resize', (_event, repositoryId: number, columns: number, rows: number) => {
+  ipcMain.on('terminal:resize', (_event, terminalId: number, columns: number, rows: number) => {
     if (!Number.isInteger(columns) || !Number.isInteger(rows)) return
-    terminalManager.resize(repositoryId, columns, rows)
+    terminalManager.resize(terminalId, columns, rows)
   })
   ipcMain.handle('clipboard:read-text', () => clipboard.readText())
   ipcMain.handle('github-desktop:launch-fast', () => {
@@ -245,6 +278,7 @@ function registerIpcHandlers() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    icon: getRuntimeResourcePath('icon.ico'),
     width: 1180,
     height: 900,
     minWidth: 820,
@@ -285,7 +319,7 @@ app.whenReady().then(() => {
   createWindow()
   startDetector()
   uiWatcher = new GitHubDesktopUiWatcher(
-    path.join(app.getAppPath(), 'scripts', 'watch-github-desktop-repository.ps1'),
+    getRuntimeScriptPath('watch-github-desktop-repository.ps1'),
     handleUiWatcherEvent
   )
   uiWatcher.start()
