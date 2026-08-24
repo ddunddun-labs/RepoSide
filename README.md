@@ -32,7 +32,8 @@ IndexedDB를 읽는 지연 모드로 전환한다. 이 방식은 GitHub Desktop�
 
 ## 설치해서 사용하기
 
-GitHub Releases에서 다음 중 하나를 내려받아 사용할 수 있다.
+[GitHub Releases](https://github.com/ddunddun-labs/RepoSide/releases/latest)에서 다음 중
+하나를 내려받아 사용할 수 있다.
 
 - `GitHub Desktop Companion-Setup-...exe`: 현재 사용자 계정에 설치하고 바탕 화면과
   시작 메뉴에 바로가기를 만든다.

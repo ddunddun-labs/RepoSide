@@ -18,3 +18,6 @@
 - Repository별 다중 PTY 터미널 탭과 출력 유지
 - Windows용 설치 프로그램과 포터블 실행 파일
 - README 기능 데모 GIF와 MP4
+
+[Unreleased]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ddunddun-labs/RepoSide/releases/tag/v0.1.0
