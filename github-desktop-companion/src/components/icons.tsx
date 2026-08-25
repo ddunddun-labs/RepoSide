@@ -21,3 +21,7 @@ export function TerminalIcon({ size = 18 }: IconProps) {
 export function ExplorerIcon({ size = 16 }: IconProps) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="none"><path d="M1.5 4h5l1.25 1.25h6.75v7.5H1.5V4Z" stroke="currentColor"/><path d="M5.25 8.25h5.5M8 5.25v6" stroke="currentColor" opacity=".75"/></svg>
 }
+
+export function RefreshIcon({ size = 15 }: IconProps) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="none"><path d="M13.25 5.5A5.5 5.5 0 1 0 13 10.9" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/><path d="M10.25 5.5h3V2.45" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
+}

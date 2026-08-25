@@ -63,6 +63,17 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
     terminal.loadAddon(fitAddon)
     terminal.open(hostRef.current)
     terminal.attachCustomKeyEventHandler(event => {
+      const copyShortcut = event.type === 'keydown' &&
+        event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'c' &&
+        terminal.hasSelection()
+      if (copyShortcut) {
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation()
+        window.companion.writeClipboardText(terminal.getSelection())
+        return false
+      }
+
       const pasteShortcut = event.type === 'keydown' && (
         (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'v') ||
         (event.shiftKey && event.key === 'Insert')

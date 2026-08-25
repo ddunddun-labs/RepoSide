@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { FileTree } from './components/FileTree'
-import { ExplorerIcon } from './components/icons'
+import { ExplorerIcon, RefreshIcon } from './components/icons'
 import { TerminalPanel } from './components/TerminalPanel'
 import { useDetector } from './hooks/useDetector'
 
@@ -39,6 +39,7 @@ export function App() {
   const [workspaceStates, setWorkspaceStates] = useState(loadWorkspaceStates)
   const [autoLaunch, setAutoLaunch] = useState(() => localStorage.getItem('auto-launch-github-desktop') === 'true')
   const [launching, setLaunching] = useState(false)
+  const [filesRefreshVersion, setFilesRefreshVersion] = useState(0)
   const workspace = repository ? workspaceStates[repository.id] ?? defaultWorkspace : defaultWorkspace
 
   const updateWorkspace = (change: Partial<WorkspaceViewState>) => {
@@ -52,6 +53,10 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(workspaceStorageKey, JSON.stringify(workspaceStates))
   }, [workspaceStates])
+
+  useEffect(() => window.companion.onFilesChanged(() => {
+    setFilesRefreshVersion(version => version + 1)
+  }), [])
 
   const launchGitHubDesktop = async () => {
     setLaunching(true)
@@ -141,6 +146,12 @@ export function App() {
       >
         <div className="panel-header">
           {!workspace.filesCollapsed && <><span>FILES</span><span className="panel-subtitle">{repository?.name}</span></>}
+          {!workspace.filesCollapsed && <button
+            className="refresh-button"
+            title="파일 새로고침"
+            aria-label="파일 새로고침"
+            onClick={() => setFilesRefreshVersion(version => version + 1)}
+          ><RefreshIcon /></button>}
           <button
             className="collapse-button"
             title={workspace.filesCollapsed ? 'Files 펼치기' : 'Files 접기'}
@@ -154,6 +165,7 @@ export function App() {
           repositoryKey={repository ? String(repository.id) : undefined}
           expandedPaths={workspace.expandedPaths}
           scrollTop={workspace.scrollTop}
+          refreshVersion={filesRefreshVersion}
           onExpandedPathsChange={expandedPaths => updateWorkspace({ expandedPaths })}
           onScrollTopChange={scrollTop => updateWorkspace({ scrollTop })}
         />}

@@ -6,24 +6,26 @@ interface TreeNodeProps {
   entry: FileEntry
   depth: number
   expandedPaths: Set<string>
+  refreshVersion: number
   onExpandedChange(path: string, expanded: boolean): void
 }
 
-function TreeNode({ entry, depth, expandedPaths, onExpandedChange }: TreeNodeProps) {
+function TreeNode({ entry, depth, expandedPaths, refreshVersion, onExpandedChange }: TreeNodeProps) {
   const expanded = entry.kind === 'directory' && expandedPaths.has(entry.relativePath)
   const [children, setChildren] = useState<FileEntry[]>()
   const [error, setError] = useState<string>()
 
   useEffect(() => {
-    if (!expanded || children) return
+    if (!expanded) return
     let cancelled = false
+    setError(undefined)
     void window.companion.readDirectory(entry.relativePath).then(result => {
       if (!cancelled) setChildren(result)
     }).catch(reason => {
       if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
     })
     return () => { cancelled = true }
-  }, [children, entry.relativePath, expanded])
+  }, [entry.relativePath, expanded, refreshVersion])
 
   const openFile = async () => {
     if (entry.kind !== 'file') return
@@ -54,6 +56,7 @@ function TreeNode({ entry, depth, expandedPaths, onExpandedChange }: TreeNodePro
       entry={child}
       depth={depth + 1}
       expandedPaths={expandedPaths}
+      refreshVersion={refreshVersion}
       onExpandedChange={onExpandedChange}
     />)}
   </>
@@ -63,6 +66,7 @@ interface FileTreeProps {
   repositoryKey?: string
   expandedPaths: string[]
   scrollTop: number
+  refreshVersion: number
   onExpandedPathsChange(paths: string[]): void
   onScrollTopChange(scrollTop: number): void
 }
@@ -71,6 +75,7 @@ export function FileTree({
   repositoryKey,
   expandedPaths,
   scrollTop,
+  refreshVersion,
   onExpandedPathsChange,
   onScrollTopChange,
 }: FileTreeProps) {
@@ -78,21 +83,26 @@ export function FileTree({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const treeRef = useRef<HTMLDivElement>(null)
+  const loadedRepositoryKey = useRef<string | undefined>(undefined)
   const expanded = new Set(expandedPaths)
 
   const load = useCallback(async () => {
     if (!repositoryKey) return
-    setLoading(true)
-    setEntries([])
+    const initialLoad = loadedRepositoryKey.current !== repositoryKey
+    if (initialLoad) {
+      setLoading(true)
+      setEntries([])
+    }
     setError(undefined)
     try {
       setEntries(await window.companion.readDirectory(''))
+      loadedRepositoryKey.current = repositoryKey
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
       setLoading(false)
     }
-  }, [repositoryKey])
+  }, [refreshVersion, repositoryKey])
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {
@@ -120,6 +130,7 @@ export function FileTree({
       entry={entry}
       depth={0}
       expandedPaths={expanded}
+      refreshVersion={refreshVersion}
       onExpandedChange={changeExpanded}
     />)}
   </div>

@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-25
+
+### Fixed
+
+- 선택 영역이 있을 때 터미널 `Ctrl+C`로 텍스트 복사
+- Repository 파일 변경 시 펼침과 스크롤 상태를 유지하는 파일 트리 자동 새로고침
+- 파일 watcher가 일시적으로 종료됐을 때 현재 Repository에 자동 재연결
+- 터미널의 작업 디렉터리 참조가 유효하지 않을 때 안전한 복구 안내 표시
+
 ## [0.1.0] - 2026-08-24
 
 ### Added
@@ -19,5 +28,6 @@
 - Windows용 설치 프로그램과 포터블 실행 파일
 - README 기능 데모 GIF와 MP4
 
-[Unreleased]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ddunddun-labs/RepoSide/releases/tag/v0.1.0

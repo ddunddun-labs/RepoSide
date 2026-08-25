@@ -147,10 +147,12 @@ button { font: inherit; }
   letter-spacing: .7px;
 }
 .panel-subtitle { overflow: hidden; color: #6e7681; font-weight: 500; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+.refresh-button { width: 26px; height: 26px; margin-left: auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; color: #6e7681; background: transparent; }
+.refresh-button:hover { color: #e6edf3; background: #21262d; }
 .collapse-button {
   width: 26px;
   height: 26px;
-  margin-left: auto;
+  margin-left: 2px;
   border: 0;
   border-radius: 5px;
   color: #8b949e;

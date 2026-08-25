@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron'
+import { watch, type FSWatcher } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
@@ -28,6 +29,10 @@ let repositoryCache: Awaited<ReturnType<typeof inspectIndexedDbRepositories>> = 
 let lastUiRepositoryName = ''
 const terminalManager = new TerminalManager(() => mainWindow)
 let uiWatcher: GitHubDesktopUiWatcher | undefined
+let repositoryWatcher: FSWatcher | undefined
+let repositoryWatcherPath = ''
+let fileChangeTimer: NodeJS.Timeout | undefined
+let repositoryWatcherRetryTimer: NodeJS.Timeout | undefined
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(windowsAppId)
@@ -56,9 +61,61 @@ async function getStorageSignature(directory: string) {
   return signatures.join('|')
 }
 
+function stopRepositoryWatcher() {
+  repositoryWatcher?.close()
+  repositoryWatcher = undefined
+  repositoryWatcherPath = ''
+  if (fileChangeTimer) clearTimeout(fileChangeTimer)
+  fileChangeTimer = undefined
+  if (repositoryWatcherRetryTimer) clearTimeout(repositoryWatcherRetryTimer)
+  repositoryWatcherRetryTimer = undefined
+}
+
+function isIgnoredFileChange(fileName: string) {
+  return fileName.split(/[\\/]+/).some(segment => ignoredDirectories.has(segment))
+}
+
+function retryRepositoryWatcher(repository: RepositoryState) {
+  stopRepositoryWatcher()
+  repositoryWatcherRetryTimer = setTimeout(() => {
+    repositoryWatcherRetryTimer = undefined
+    if (
+      activeRepository?.id === repository.id &&
+      activeRepository.path === repository.path
+    ) watchRepository(repository)
+  }, 1000)
+}
+
+function watchRepository(repository?: RepositoryState) {
+  const repositoryPath = repository ? toHostFileSystemPath(repository.path) : ''
+  if (repositoryPath === repositoryWatcherPath) return
+  stopRepositoryWatcher()
+  if (!repository || !repositoryPath) return
+
+  try {
+    repositoryWatcher = watch(repositoryPath, { recursive: true }, (_event, fileName) => {
+      if (fileName && isIgnoredFileChange(fileName)) return
+      if (fileChangeTimer) clearTimeout(fileChangeTimer)
+      fileChangeTimer = setTimeout(() => {
+        fileChangeTimer = undefined
+        mainWindow?.webContents.send('files:changed')
+      }, 200)
+    })
+    repositoryWatcher.on('error', error => {
+      console.warn('[files:watcher]', error)
+      retryRepositoryWatcher(repository)
+    })
+    repositoryWatcherPath = repositoryPath
+  } catch (error) {
+    console.warn('[files:watcher]', error)
+    retryRepositoryWatcher(repository)
+  }
+}
+
 function publishDetectorState(nextState: DetectorState) {
   detectorState = nextState
   activeRepository = nextState.repository
+  watchRepository(activeRepository)
   mainWindow?.webContents.send('detector:state', nextState)
 }
 
@@ -256,6 +313,9 @@ function registerIpcHandlers() {
     terminalManager.resize(terminalId, columns, rows)
   })
   ipcMain.handle('clipboard:read-text', () => clipboard.readText())
+  ipcMain.on('clipboard:write-text', (_event, text: string) => {
+    if (typeof text === 'string' && text.length <= 2 * 1024 * 1024) clipboard.writeText(text)
+  })
   ipcMain.handle('github-desktop:launch-fast', () => {
     const localAppData = process.env.LOCALAPPDATA
     if (!localAppData) throw new Error('LOCALAPPDATA is unavailable.')
@@ -335,5 +395,6 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   if (detectorTimer) clearInterval(detectorTimer)
   terminalManager.dispose()
+  stopRepositoryWatcher()
   uiWatcher?.dispose()
 })

@@ -9,6 +9,11 @@ const api: CompanionApi = {
     return () => ipcRenderer.removeListener('detector:state', handler)
   },
   readDirectory: relativePath => ipcRenderer.invoke('files:read-directory', relativePath),
+  onFilesChanged: listener => {
+    const handler = () => listener()
+    ipcRenderer.on('files:changed', handler)
+    return () => ipcRenderer.removeListener('files:changed', handler)
+  },
   openFile: relativePath => ipcRenderer.invoke('files:open', relativePath),
   showInExplorer: relativePath => ipcRenderer.invoke('files:show-in-explorer', relativePath),
   openRepositoryInExplorer: () => ipcRenderer.invoke('files:open-repository'),
@@ -29,6 +34,7 @@ const api: CompanionApi = {
     return () => ipcRenderer.removeListener('terminal:data', handler)
   },
   readClipboardText: () => ipcRenderer.invoke('clipboard:read-text'),
+  writeClipboardText: text => ipcRenderer.send('clipboard:write-text', text),
   launchGitHubDesktopFast: () => ipcRenderer.invoke('github-desktop:launch-fast'),
 }
 

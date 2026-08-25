@@ -1,6 +1,6 @@
 {
   "name": "github-desktop-companion",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Windows companion that follows the repository selected in GitHub Desktop.",
   "author": "sysscalper",
   "license": "MIT",

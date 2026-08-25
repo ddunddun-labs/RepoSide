@@ -5,6 +5,7 @@ import * as pty from 'node-pty'
 import type { RepositoryState, TerminalAttachment, TerminalTab } from '../../src/shared/types'
 
 const maximumBufferLength = 2 * 1024 * 1024
+const cwdDiagnosticMessage = '\r\n\x1b[33m[Companion] 현재 터미널의 작업 디렉터리 참조가 유효하지 않아. cd .. 후 Repository로 다시 들어오거나 새 터미널 탭을 열어줘.\x1b[0m\r\n'
 
 interface TerminalSession {
   id: number
@@ -14,6 +15,8 @@ interface TerminalSession {
   buffer: string
   outputOffset: number
   exited: boolean
+  diagnosticTail: string
+  cwdWarningShown: boolean
 }
 
 function environment() {
@@ -144,6 +147,18 @@ export class TerminalManager {
     }
   }
 
+  private appendOutput(session: TerminalSession, data: string) {
+    const offset = session.outputOffset
+    session.buffer = (session.buffer + data).slice(-maximumBufferLength)
+    session.outputOffset += data.length
+    this.getWindow()?.webContents.send('terminal:data', {
+      repositoryId: session.repository.id,
+      terminalId: session.id,
+      data,
+      offset,
+    })
+  }
+
   private createSession(repository: RepositoryState, columns: number, rows: number) {
     const id = this.nextTerminalId++
     const isWindows = process.platform === 'win32'
@@ -164,32 +179,27 @@ export class TerminalManager {
       buffer: '',
       outputOffset: 0,
       exited: false,
+      diagnosticTail: '',
+      cwdWarningShown: false,
     }
     this.repositorySessions(repository.id).set(id, session)
 
     terminalProcess.onData(data => {
-      const offset = session.outputOffset
-      session.buffer = (session.buffer + data).slice(-maximumBufferLength)
-      session.outputOffset += data.length
-      this.getWindow()?.webContents.send('terminal:data', {
-        repositoryId: repository.id,
-        terminalId: id,
-        data,
-        offset,
-      })
+      this.appendOutput(session, data)
+      session.diagnosticTail = (session.diagnosticTail + data).slice(-1024)
+      if (
+        !session.cwdWarningShown &&
+        (/Error:[^\r\n]{0,200}\buv_cwd\b/i.test(session.diagnosticTail) ||
+          /ENOENT:[^\r\n]{0,160}\b(?:uv_)?cwd\b/i.test(session.diagnosticTail))
+      ) {
+        session.cwdWarningShown = true
+        this.appendOutput(session, cwdDiagnosticMessage)
+      }
     })
     terminalProcess.onExit(({ exitCode }) => {
       session.exited = true
       const message = `\r\n\x1b[90m[${shellName} exited with code ${exitCode}]\x1b[0m\r\n`
-      const offset = session.outputOffset
-      session.buffer = (session.buffer + message).slice(-maximumBufferLength)
-      session.outputOffset += message.length
-      this.getWindow()?.webContents.send('terminal:data', {
-        repositoryId: repository.id,
-        terminalId: id,
-        data: message,
-        offset,
-      })
+      this.appendOutput(session, message)
     })
 
     return session
