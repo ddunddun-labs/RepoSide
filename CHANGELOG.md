@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-01
+
+### Changed
+
+- 기본 창 크기를 1100x700으로, 최소 크기를 900x560으로 조정
+- 창 위치와 크기를 종료 시 저장하고 다음 실행 시 복원하며, 화면 밖 bounds는 현재 디스플레이 안으로 보정
+
+### Fixed
+
+- 터미널이 툴바 아래 남은 세로 공간을 채우도록 flex 높이 체인과 xterm fit 동작 개선
+- 초기 attach, 폰트 로딩, 창 리사이즈 시 xterm fit과 PTY resize를 안정적으로 동기화
+- 터미널 탭 전환 시 xterm을 불필요하게 재생성하지 않도록 정리
+
 ## [0.1.1] - 2026-08-25
 
 ### Fixed
@@ -28,6 +41,7 @@
 - Windows용 설치 프로그램과 포터블 실행 파일
 - README 기능 데모 GIF와 MP4
 
-[Unreleased]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ddunddun-labs/RepoSide/releases/tag/v0.1.0

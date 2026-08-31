@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import { useEffect, useRef, useState } from 'react'
-import type { RepositoryState, TerminalData, TerminalTab } from '../shared/types'
+import type { RepositoryState, TerminalAttachment, TerminalData, TerminalTab } from '../shared/types'
 import { TerminalIcon } from './icons'
 
 interface TerminalPanelProps {
@@ -10,23 +10,64 @@ interface TerminalPanelProps {
 
 export function TerminalPanel({ repository }: TerminalPanelProps) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const lastRepositoryId = useRef<number | undefined>(undefined)
+  const terminalRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const activeTerminalIdRef = useRef<number | undefined>(undefined)
+  const attachedRef = useRef(false)
+  const outputOffsetRef = useRef<number | undefined>(undefined)
   const terminalSize = useRef({ columns: 80, rows: 24 })
   const [terminals, setTerminals] = useState<TerminalTab[]>([])
   const [activeTerminalId, setActiveTerminalId] = useState<number>()
+
+  activeTerminalIdRef.current = activeTerminalId
+
+  const syncTerminalSize = () => {
+    const fitAddon = fitAddonRef.current
+    const terminal = terminalRef.current
+    if (!fitAddon || !terminal) return false
+    try {
+      fitAddon.fit()
+      terminalSize.current = { columns: terminal.cols, rows: terminal.rows }
+      if (attachedRef.current && activeTerminalIdRef.current !== undefined) {
+        window.companion.resizeTerminal(
+          activeTerminalIdRef.current,
+          terminal.cols,
+          terminal.rows
+        )
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const applyAttachment = (attachment: TerminalAttachment) => {
+    const terminal = terminalRef.current
+    if (!terminal) return
+    setTerminals(attachment.terminals)
+    setActiveTerminalId(attachment.terminalId)
+    activeTerminalIdRef.current = attachment.terminalId
+    terminal.clear()
+    terminal.write(attachment.bufferedOutput)
+    outputOffsetRef.current = attachment.outputOffset
+    attachedRef.current = true
+    syncTerminalSize()
+  }
 
   useEffect(() => {
     if (!repository || !hostRef.current) {
       setTerminals([])
       setActiveTerminalId(undefined)
+      activeTerminalIdRef.current = undefined
+      attachedRef.current = false
+      outputOffsetRef.current = undefined
       return
     }
 
-    const repositoryChanged = lastRepositoryId.current !== repository.id
-    lastRepositoryId.current = repository.id
-    const requestedTerminalId = repositoryChanged ? undefined : activeTerminalId
-    if (repositoryChanged) setTerminals([])
     let cancelled = false
+    attachedRef.current = false
+    outputOffsetRef.current = undefined
+    activeTerminalIdRef.current = undefined
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -60,8 +101,11 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
       },
     })
     const fitAddon = new FitAddon()
+    terminalRef.current = terminal
+    fitAddonRef.current = fitAddon
     terminal.loadAddon(fitAddon)
     terminal.open(hostRef.current)
+
     terminal.attachCustomKeyEventHandler(event => {
       const copyShortcut = event.type === 'keydown' &&
         event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'c' &&
@@ -89,60 +133,63 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
       return false
     })
 
-    let attached = false
-    let outputOffset: number | undefined
     const pendingOutput: TerminalData[] = []
     const writeOutput = (event: TerminalData) => {
-      if (outputOffset === undefined) {
+      if (outputOffsetRef.current === undefined) {
         pendingOutput.push(event)
         return
       }
       const eventEnd = event.offset + event.data.length
-      if (eventEnd <= outputOffset) return
-      const overlap = Math.max(0, outputOffset - event.offset)
+      if (eventEnd <= outputOffsetRef.current) return
+      const overlap = Math.max(0, outputOffsetRef.current - event.offset)
       terminal.write(event.data.slice(overlap))
-      outputOffset = eventEnd
+      outputOffsetRef.current = eventEnd
     }
+
     const dataDisposable = terminal.onData(data => {
-      if (attached && activeTerminalId !== undefined) {
-        window.companion.writeTerminal(activeTerminalId, data)
+      if (attachedRef.current && activeTerminalIdRef.current !== undefined) {
+        window.companion.writeTerminal(activeTerminalIdRef.current, data)
       }
     })
     const unsubscribe = window.companion.onTerminalData(event => {
       if (
         event.repositoryId === repository.id &&
-        event.terminalId === activeTerminalId
+        event.terminalId === activeTerminalIdRef.current
       ) writeOutput(event)
     })
-    const resizeObserver = new ResizeObserver(() => {
-      try {
-        fitAddon.fit()
-        terminalSize.current = { columns: terminal.cols, rows: terminal.rows }
-        if (attached) {
-          window.companion.resizeTerminal(activeTerminalId!, terminal.cols, terminal.rows)
-        }
-      } catch {
-        // The element can briefly have no dimensions while switching repositories.
-      }
-    })
-    resizeObserver.observe(hostRef.current)
 
-    requestAnimationFrame(() => {
-      fitAddon.fit()
-      terminalSize.current = { columns: terminal.cols, rows: terminal.rows }
+    const scheduleFit = (afterFit?: () => void) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (cancelled) return
+          syncTerminalSize()
+          afterFit?.()
+        })
+      })
+    }
+
+    const resizeObserver = new ResizeObserver(() => scheduleFit())
+    resizeObserver.observe(hostRef.current)
+    if (terminal.element) resizeObserver.observe(terminal.element)
+
+    const onWindowResize = () => scheduleFit()
+    window.addEventListener('resize', onWindowResize)
+
+    void document.fonts.ready.then(() => {
+      if (!cancelled) scheduleFit()
+    })
+
+    scheduleFit(() => {
       void window.companion.attachTerminal(
-        requestedTerminalId,
-        terminal.cols,
-        terminal.rows
+        undefined,
+        terminalSize.current.columns,
+        terminalSize.current.rows
       ).then(attachment => {
         if (cancelled || attachment.repositoryId !== repository.id) return
-        setTerminals(attachment.terminals)
-        setActiveTerminalId(attachment.terminalId)
-        terminal.write(attachment.bufferedOutput)
-        outputOffset = attachment.outputOffset
+        applyAttachment(attachment)
         for (const event of pendingOutput) writeOutput(event)
         pendingOutput.length = 0
-        attached = true
+        scheduleFit()
         terminal.focus()
       }).catch(error => {
         terminal.writeln(`\r\n\x1b[31mTerminal failed: ${error.message}\x1b[0m`)
@@ -151,31 +198,52 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
 
     return () => {
       cancelled = true
-      attached = false
+      attachedRef.current = false
+      window.removeEventListener('resize', onWindowResize)
       resizeObserver.disconnect()
       unsubscribe()
       dataDisposable.dispose()
       terminal.dispose()
+      terminalRef.current = null
+      fitAddonRef.current = null
     }
-  }, [repository?.id, activeTerminalId])
+  }, [repository?.id])
+
+  const selectTerminal = (terminalId: number) => {
+    if (!repository || terminalId === activeTerminalIdRef.current) return
+    syncTerminalSize()
+    void window.companion.attachTerminal(
+      terminalId,
+      terminalSize.current.columns,
+      terminalSize.current.rows
+    ).then(attachment => {
+      if (attachment.repositoryId !== repository.id) return
+      applyAttachment(attachment)
+    })
+  }
 
   const createTerminal = () => {
     if (!repository) return
-    const { columns, rows } = terminalSize.current
-    void window.companion.createTerminal(columns, rows).then(attachment => {
+    syncTerminalSize()
+    void window.companion.createTerminal(
+      terminalSize.current.columns,
+      terminalSize.current.rows
+    ).then(attachment => {
       if (attachment.repositoryId !== repository.id) return
-      setTerminals(attachment.terminals)
-      setActiveTerminalId(attachment.terminalId)
+      applyAttachment(attachment)
     })
   }
 
   const closeTerminal = (terminalId: number) => {
     if (!repository) return
-    const { columns, rows } = terminalSize.current
-    void window.companion.closeTerminal(terminalId, columns, rows).then(attachment => {
+    syncTerminalSize()
+    void window.companion.closeTerminal(
+      terminalId,
+      terminalSize.current.columns,
+      terminalSize.current.rows
+    ).then(attachment => {
       if (attachment.repositoryId !== repository.id) return
-      setTerminals(attachment.terminals)
-      setActiveTerminalId(attachment.terminalId)
+      applyAttachment(attachment)
     })
   }
 
@@ -186,7 +254,7 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
           className={`terminal-tab${item.id === activeTerminalId ? ' active' : ''}`}
           key={item.id}
         >
-          <button className="terminal-tab-select" onClick={() => setActiveTerminalId(item.id)}>
+          <button className="terminal-tab-select" onClick={() => selectTerminal(item.id)}>
             <TerminalIcon size={15} />
             <span>{terminals.length > 1 ? `${item.shellName} ${index + 1}` : item.shellName}</span>
           </button>

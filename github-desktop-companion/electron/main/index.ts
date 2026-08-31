@@ -16,6 +16,12 @@ import {
 import type { DetectorState, FileEntry, RepositoryState } from '../../src/shared/types'
 import { TerminalManager } from './terminal-manager'
 import { GitHubDesktopUiWatcher, type UiWatcherEvent } from './github-desktop-ui-watcher'
+import {
+  minimumWindowHeight,
+  minimumWindowWidth,
+  resolveInitialWindowBounds,
+  saveWindowBounds,
+} from './window-bounds'
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 const windowsAppId = 'io.github.sysscalper.githubdesktopcompanion'
@@ -337,12 +343,17 @@ function registerIpcHandlers() {
 }
 
 function createWindow() {
+  const initialBounds = resolveInitialWindowBounds()
+
   mainWindow = new BrowserWindow({
     icon: getRuntimeResourcePath('icon.ico'),
-    width: 1180,
-    height: 900,
-    minWidth: 820,
-    minHeight: 600,
+    ...(initialBounds.x !== undefined && initialBounds.y !== undefined
+      ? { x: initialBounds.x, y: initialBounds.y }
+      : {}),
+    width: initialBounds.width,
+    height: initialBounds.height,
+    minWidth: minimumWindowWidth,
+    minHeight: minimumWindowHeight,
     backgroundColor: '#0d1117',
     title: 'GitHub Desktop Companion',
     webPreferences: {
@@ -354,6 +365,10 @@ function createWindow() {
   })
 
   mainWindow.removeMenu()
+  mainWindow.on('close', () => {
+    if (!mainWindow) return
+    saveWindowBounds(mainWindow.getBounds())
+  })
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
     console.error('[renderer:did-fail-load]', { errorCode, errorDescription, validatedUrl })
   })
