@@ -28,6 +28,7 @@ const api: CompanionApi = {
   closeTerminal: (terminalId, columns, rows) => {
     return ipcRenderer.invoke('terminal:close', terminalId, columns, rows)
   },
+  setTerminalLanguage: language => ipcRenderer.send('terminal:set-language', language),
   writeTerminal: (terminalId, data) => ipcRenderer.send('terminal:write', terminalId, data),
   resizeTerminal: (terminalId, columns, rows) => {
     ipcRenderer.send('terminal:resize', terminalId, columns, rows)

@@ -1,9 +1,14 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { I18nContext } from '../I18nProvider'
+import { localizeRuntimeMessage } from '../i18n'
+import type { UiLanguage } from '../i18n'
 
 interface Props { children: ReactNode }
 interface State { error?: Error }
 
 export class AppErrorBoundary extends Component<Props, State> {
+  static contextType = I18nContext
+  declare context: { language: UiLanguage; t(key: 'app.rendererError'): string } | undefined
   state: State = {}
 
   static getDerivedStateFromError(error: Error): State {
@@ -17,8 +22,8 @@ export class AppErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return <div className="fatal-error">
-        <strong>Renderer를 시작하지 못했어.</strong>
-        <span>{this.state.error.message}</span>
+        <strong>{this.context?.t('app.rendererError') ?? 'Could not start the app.'}</strong>
+        <span>{localizeRuntimeMessage(this.state.error.message, this.context?.language ?? 'en')}</span>
       </div>
     }
     return this.props.children

@@ -2,6 +2,8 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import { useEffect, useRef, useState } from 'react'
 import type { RepositoryState, TerminalAttachment, TerminalData, TerminalTab } from '../shared/types'
+import { useI18n } from '../I18nProvider'
+import { localizeRuntimeMessage, translate } from '../i18n'
 import { TerminalIcon } from './icons'
 
 interface TerminalPanelProps {
@@ -9,6 +11,9 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ repository }: TerminalPanelProps) {
+  const { language, t } = useI18n()
+  const languageRef = useRef(language)
+  languageRef.current = language
   const hostRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -192,7 +197,8 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
         scheduleFit()
         terminal.focus()
       }).catch(error => {
-        terminal.writeln(`\r\n\x1b[31mTerminal failed: ${error.message}\x1b[0m`)
+        const reason = error instanceof Error ? error.message : String(error)
+        terminal.writeln(`\r\n\x1b[31m${translate(languageRef.current, 'terminal.error', { reason: localizeRuntimeMessage(reason, languageRef.current) })}\x1b[0m`)
       })
     })
 
@@ -260,16 +266,16 @@ export function TerminalPanel({ repository }: TerminalPanelProps) {
           </button>
           <button
             className="terminal-tab-close"
-            title="터미널 닫기"
-            aria-label={`${item.shellName} 터미널 닫기`}
+            title={t('terminal.close', { name: item.shellName })}
+            aria-label={t('terminal.close', { name: item.shellName })}
             onClick={() => closeTerminal(item.id)}
           >×</button>
         </div>)}
       </div>
-      <button className="icon-button" title="새 터미널" onClick={createTerminal} disabled={!repository}>+</button>
+      <button className="icon-button" title={t('terminal.new')} aria-label={t('terminal.new')} onClick={createTerminal} disabled={!repository}>+</button>
     </div>
     {repository
       ? <div className="xterm-host" ref={hostRef} />
-      : <div className="terminal-placeholder"><div className="terminal-mark"><TerminalIcon size={26} /></div><h2>Terminal</h2><p>Repository 연결을 기다리는 중이야.</p></div>}
+      : <div className="terminal-placeholder"><div className="terminal-mark"><TerminalIcon size={26} /></div><h2>{t('terminal.heading')}</h2><p>{t('terminal.waiting')}</p></div>}
   </div>
 }

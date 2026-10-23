@@ -3,9 +3,10 @@ import os from 'node:os'
 import type { IPty } from 'node-pty'
 import * as pty from 'node-pty'
 import type { RepositoryState, TerminalAttachment, TerminalTab } from '../../src/shared/types'
+import { translate } from '../../src/i18n'
+import type { UiLanguage } from '../../src/i18n'
 
 const maximumBufferLength = 2 * 1024 * 1024
-const cwdDiagnosticMessage = '\r\n\x1b[33m[Companion] 현재 터미널의 작업 디렉터리 참조가 유효하지 않아. cd .. 후 Repository로 다시 들어오거나 새 터미널 탭을 열어줘.\x1b[0m\r\n'
 
 interface TerminalSession {
   id: number
@@ -17,6 +18,7 @@ interface TerminalSession {
   exited: boolean
   diagnosticTail: string
   cwdWarningShown: boolean
+  language: UiLanguage
 }
 
 function environment() {
@@ -40,6 +42,7 @@ export class TerminalManager {
   private readonly sessions = new Map<number, Map<number, TerminalSession>>()
   private readonly activeTerminals = new Map<number, number>()
   private nextTerminalId = 1
+  private language: UiLanguage = 'en'
 
   constructor(private readonly getWindow: () => BrowserWindow | undefined) {}
 
@@ -112,6 +115,13 @@ export class TerminalManager {
     this.activeTerminals.clear()
   }
 
+  setLanguage(language: UiLanguage) {
+    this.language = language
+    for (const repositorySessions of this.sessions.values()) {
+      for (const session of repositorySessions.values()) session.language = language
+    }
+  }
+
   private repositorySessions(repositoryId: number) {
     let repositorySessions = this.sessions.get(repositoryId)
     if (!repositorySessions) {
@@ -181,6 +191,7 @@ export class TerminalManager {
       exited: false,
       diagnosticTail: '',
       cwdWarningShown: false,
+      language: this.language,
     }
     this.repositorySessions(repository.id).set(id, session)
 
@@ -193,12 +204,12 @@ export class TerminalManager {
           /ENOENT:[^\r\n]{0,160}\b(?:uv_)?cwd\b/i.test(session.diagnosticTail))
       ) {
         session.cwdWarningShown = true
-        this.appendOutput(session, cwdDiagnosticMessage)
+        this.appendOutput(session, `\r\n\x1b[33m${translate(session.language, 'terminal.invalidCwd')}\x1b[0m\r\n`)
       }
     })
     terminalProcess.onExit(({ exitCode }) => {
       session.exited = true
-      const message = `\r\n\x1b[90m[${shellName} exited with code ${exitCode}]\x1b[0m\r\n`
+      const message = `\r\n\x1b[90m${translate(session.language, 'terminal.exited', { name: shellName, code: exitCode })}\x1b[0m\r\n`
       this.appendOutput(session, message)
     })
 

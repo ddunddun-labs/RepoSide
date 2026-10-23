@@ -7,7 +7,7 @@ const source = await readFile(new URL('./ai-commit.ts', import.meta.url), 'utf8'
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText
-const { hashCommitState, parseCommitDraft, requestCommitDraft, requestGeminiModels } = await import(
+const { defaultAiInstruction, hashCommitState, parseCommitDraft, requestCommitDraft, requestGeminiModels } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
 const scopeSource = await readFile(new URL('./commit-scope.ts', import.meta.url), 'utf8')
@@ -53,6 +53,47 @@ test('parses a Korean Summary and Description from Gemini JSON output', () => {
     summary: 'feat(ai): 커밋 메시지 생성',
     description: '선택된 변경을 요약해.',
   })
+})
+
+test('keeps the default Korean commit instruction independent from UI translations', () => {
+  assert.equal(defaultAiInstruction, [
+    '한국어 Conventional Commits 형식으로 작성해.',
+    '실제 변경 내용만 정확하고 간결하게 요약해. 추측하거나 변경하지 않은 동작을 주장하지 마.',
+    '제목은 type(scope): 요약 또는 type: 요약 형식의 한 줄로 작성해.',
+    '본문에는 중요한 이유와 동작을 필요할 때만 적고, 불필요한 설명은 넣지 마.',
+    '요청한 JSON 형식 이외의 내용은 출력하지 마.',
+  ].join('\n'))
+})
+
+test('UI locale changes do not alter the Gemini instruction or Korean draft', async () => {
+  const uiSource = await readFile(new URL('../../src/i18n.ts', import.meta.url), 'utf8')
+  const uiCompiled = ts.transpileModule(uiSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText
+  const { translate } = await import(`data:text/javascript;base64,${Buffer.from(uiCompiled).toString('base64')}`)
+  const originalFetch = globalThis.fetch
+  const systemInstructions = []
+  const koreanDraft = { summary: 'fix(ui): 언어 설정 분리', description: '커밋 결과는 한국어로 유지함.' }
+  globalThis.fetch = async (_input, init) => {
+    systemInstructions.push(JSON.parse(init.body).system_instruction.parts[0].text)
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify(koreanDraft) }] } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+
+  try {
+    const drafts = []
+    for (const uiLanguage of ['en', 'ko']) {
+      assert.ok(translate(uiLanguage, 'ai.language'))
+      drafts.push(await requestCommitDraft('test-api-key', 'gemini-test-model', defaultAiInstruction, 'RepoSide', 'main', 'diff'))
+    }
+    const [englishUiDraft, koreanUiDraft] = drafts
+    assert.deepEqual(englishUiDraft, koreanUiDraft)
+    assert.deepEqual(englishUiDraft, koreanDraft)
+    assert.deepEqual(systemInstructions, [defaultAiInstruction, defaultAiInstruction])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test('rejects malformed or multiline commit summaries', () => {

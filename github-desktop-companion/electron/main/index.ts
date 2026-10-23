@@ -26,6 +26,7 @@ import {
 import { resolveDesktopCommitScope, type DesktopCommitSnapshot } from './commit-scope'
 import { TerminalManager } from './terminal-manager'
 import { assertExpectedRepository, resolveSafeRepositoryPath } from './repository-path'
+import { resolveUiLanguage } from '../../src/i18n'
 import { GitHubDesktopUiWatcher, type UiWatcherEvent } from './github-desktop-ui-watcher'
 import {
   minimumWindowHeight,
@@ -652,6 +653,9 @@ function registerIpcHandlers() {
   ipcMain.on('terminal:resize', (_event, terminalId: number, columns: number, rows: number) => {
     if (!Number.isInteger(columns) || !Number.isInteger(rows)) return
     terminalManager.resize(terminalId, columns, rows)
+  })
+  ipcMain.on('terminal:set-language', (_event, language: unknown) => {
+    if (language === 'en' || language === 'ko') terminalManager.setLanguage(resolveUiLanguage(language))
   })
   ipcMain.handle('clipboard:read-text', () => clipboard.readText())
   ipcMain.on('clipboard:write-text', (_event, text: string) => {

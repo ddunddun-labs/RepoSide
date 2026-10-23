@@ -127,9 +127,10 @@ button { font: inherit; }
 .settings-heading button { width: 28px; height: 28px; border: 0; border-radius: 5px; color: #8b949e; background: transparent; cursor: pointer; font-size: 21px; }
 .settings-heading button:hover { color: #f0f6fc; background: #30363d; }
 .settings-field { display: grid; gap: 7px; margin: 0 0 14px; color: #c9d1d9; font-size: 12px; font-weight: 600; }
-.settings-field input, .settings-field textarea { width: 100%; padding: 9px 10px; border: 1px solid #3d444d; border-radius: 5px; outline: 0; color: #e6edf3; background: #0d1117; font: inherit; font-weight: 400; }
-.settings-field input:focus, .settings-field textarea:focus { border-color: #58a6ff; box-shadow: 0 0 0 2px rgba(56, 139, 253, .18); }
+.settings-field input, .settings-field textarea, .settings-field select { width: 100%; padding: 9px 10px; border: 1px solid #3d444d; border-radius: 5px; outline: 0; color: #e6edf3; background: #0d1117; font: inherit; font-weight: 400; }
+.settings-field input:focus, .settings-field textarea:focus, .settings-field select:focus { border-color: #58a6ff; box-shadow: 0 0 0 2px rgba(56, 139, 253, .18); }
 .settings-field textarea { resize: vertical; line-height: 1.5; }
+.settings-section-title { margin: 18px 0 12px; padding-top: 14px; border-top: 1px solid #30363d; color: #f0f6fc; font-size: 13px; font-weight: 650; }
 .settings-field small { color: #8b949e; font-size: 11px; font-weight: 400; }
 .settings-secondary-button:disabled { opacity: .5; cursor: default; }
 .settings-footer { margin-top: 18px; padding-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #30363d; color: #8b949e; font-size: 11px; }

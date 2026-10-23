@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useI18n } from '../I18nProvider'
+import { localizeRuntimeMessage } from '../i18n'
+import type { TranslationKey } from '../i18n'
 import type { FileEntry } from '../shared/types'
 import { ChevronIcon, FileIcon, FolderIcon } from './icons'
 
@@ -30,6 +33,7 @@ function TreeNode({
   onExpandedChange,
   onContextMenu,
 }: TreeNodeProps) {
+  const { language, t } = useI18n()
   const expanded = entry.kind === 'directory' && expandedPaths.has(entry.relativePath)
   const [children, setChildren] = useState<FileEntry[]>()
   const [error, setError] = useState<string>()
@@ -63,8 +67,8 @@ function TreeNode({
         event.stopPropagation()
         onContextMenu(entry, event.clientX, event.clientY)
       }}
-      title={error ?? entry.relativePath}
-      aria-label={`${entry.kind === 'directory' ? '폴더' : '파일'} ${entry.name}`}
+      title={error ? localizeRuntimeMessage(error, language) : entry.relativePath}
+      aria-label={`${t(entry.kind === 'directory' ? 'files.folder' : 'files.file')} ${entry.name}`}
     >
       <span className={`tree-chevron ${expanded ? 'expanded' : ''} ${entry.kind === 'file' ? 'hidden' : ''}`}><ChevronIcon /></span>
       <span className={entry.kind === 'directory' ? 'folder-color' : 'file-color'}>
@@ -105,6 +109,7 @@ interface ContextMenuProps {
 }
 
 function TreeContextMenu({ state, expanded, onClose, onOpenFile, onShowInExplorer, onCopyPath, onToggleFolder }: ContextMenuProps) {
+  const { t } = useI18n()
   const menuRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState<{ left: number; top: number }>()
   const isDirectory = state.entry.kind === 'directory'
@@ -172,16 +177,16 @@ function TreeContextMenu({ state, expanded, onClose, onOpenFile, onShowInExplore
     className="tree-context-menu"
     style={style}
     role="menu"
-    aria-label={`${isDirectory ? '폴더' : '파일'} ${state.entry.name} 메뉴`}
+    aria-label={t('files.menu', { kind: t(isDirectory ? 'files.folder' : 'files.file'), name: state.entry.name })}
     onKeyDown={handleMenuKeyDown}
     onContextMenu={event => event.preventDefault()}
   >
     {isDirectory
-      ? <button role="menuitem" type="button" onClick={onToggleFolder}>{expanded ? '폴더 접기' : '폴더 펼치기'}</button>
-      : <button role="menuitem" type="button" onClick={onOpenFile}>파일 열기</button>}
-    <button role="menuitem" type="button" onClick={onShowInExplorer}>탐색기에서 보기</button>
-    <button role="menuitem" type="button" onClick={() => onCopyPath(true)}>전체 경로 복사</button>
-    <button role="menuitem" type="button" onClick={() => onCopyPath(false)}>상대 경로 복사</button>
+      ? <button role="menuitem" type="button" onClick={onToggleFolder}>{expanded ? t('files.collapseFolder') : t('files.expandFolder')}</button>
+      : <button role="menuitem" type="button" onClick={onOpenFile}>{t('files.open')}</button>}
+    <button role="menuitem" type="button" onClick={onShowInExplorer}>{t('files.reveal')}</button>
+    <button role="menuitem" type="button" onClick={() => onCopyPath(true)}>{t('files.copyAbsolute')}</button>
+    <button role="menuitem" type="button" onClick={() => onCopyPath(false)}>{t('files.copyRelative')}</button>
   </div>, document.body)
 }
 
@@ -193,11 +198,12 @@ export function FileTree({
   onExpandedPathsChange,
   onScrollTopChange,
 }: FileTreeProps) {
+  const { language, t } = useI18n()
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const [contextMenu, setContextMenu] = useState<ContextMenuState>()
-  const [actionNotice, setActionNotice] = useState<string>()
+  const [actionNotice, setActionNotice] = useState<{ key?: TranslationKey; detail?: string }>()
   const treeRef = useRef<HTMLDivElement>(null)
   const loadedRepositoryKey = useRef<string | undefined>(undefined)
   const repositoryKeyRef = useRef(repositoryKey)
@@ -248,20 +254,20 @@ export function FileTree({
     setContextMenu({ entry, repositoryKey, x, y })
   }
 
-  const runAction = async (action: () => Promise<void>, successMessage: string) => {
+  const runAction = async (action: () => Promise<void>, successKey: TranslationKey) => {
     closeContextMenu()
     try {
       await action()
-      setActionNotice(successMessage)
+      setActionNotice({ key: successKey })
     } catch (reason) {
-      setActionNotice(reason instanceof Error ? reason.message : String(reason))
+      setActionNotice({ detail: reason instanceof Error ? reason.message : String(reason) })
     }
   }
 
-  if (!repositoryKey) return <div className="panel-empty">Repository 연결을 기다리는 중이야.</div>
-  if (error) return <div className="panel-empty error-text">{error}</div>
+  if (!repositoryKey) return <div className="panel-empty">{t('files.waiting')}</div>
+  if (error) return <div className="panel-empty error-text">{localizeRuntimeMessage(error, language)}</div>
   if (loading || loadedRepositoryKey.current !== repositoryKey) {
-    return <div className="panel-empty"><span className="spinner" />파일을 불러오는 중...</div>
+    return <div className="panel-empty"><span className="spinner" />{t('files.loading')}</div>
   }
 
   return <div
@@ -279,7 +285,9 @@ export function FileTree({
       onExpandedChange={changeExpanded}
       onContextMenu={handleContextMenu}
     />)}
-    {actionNotice && <div className="tree-action-notice" role="status" aria-live="polite">{actionNotice}</div>}
+    {actionNotice && <div className="tree-action-notice" role="status" aria-live="polite">
+      {actionNotice.detail ? localizeRuntimeMessage(actionNotice.detail, language) : actionNotice.key ? t(actionNotice.key) : ''}
+    </div>}
     {contextMenu && contextMenu.repositoryKey === repositoryKey && <TreeContextMenu
       state={contextMenu}
       expanded={expanded.has(contextMenu.entry.relativePath)}
@@ -288,14 +296,14 @@ export function FileTree({
         if (contextMenu.entry.kind === 'file') void runAction(async () => {
           const openError = await window.companion.openFile(contextMenu.entry.relativePath, contextMenu.repositoryKey)
           if (openError) throw new Error(openError)
-        }, '파일을 열었어.')
+        }, 'files.opened')
       }}
       onShowInExplorer={() => void runAction(async () => {
         await window.companion.showInExplorer(contextMenu.entry.relativePath, contextMenu.repositoryKey)
-      }, '탐색기에서 항목을 표시했어.')}
+      }, 'files.revealed')}
       onCopyPath={absolute => void runAction(async () => {
         await window.companion.copyRepositoryPath(contextMenu.entry.relativePath, contextMenu.repositoryKey, absolute)
-      }, absolute ? '전체 경로를 복사했어.' : '상대 경로를 복사했어.')}
+      }, absolute ? 'files.absoluteCopied' : 'files.relativeCopied')}
       onToggleFolder={() => {
         if (contextMenu.entry.kind === 'directory') {
           changeExpanded(contextMenu.entry.relativePath, !expanded.has(contextMenu.entry.relativePath))

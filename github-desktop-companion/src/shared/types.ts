@@ -1,3 +1,5 @@
+import type { UiLanguage } from '../i18n'
+
 export type ConnectionStatus = 'connecting' | 'linked' | 'error'
 export type LinkMode = 'fast' | 'delayed'
 
@@ -80,6 +82,7 @@ export interface CompanionApi {
   attachTerminal(terminalId: number | undefined, columns: number, rows: number): Promise<TerminalAttachment>
   createTerminal(columns: number, rows: number): Promise<TerminalAttachment>
   closeTerminal(terminalId: number, columns: number, rows: number): Promise<TerminalAttachment>
+  setTerminalLanguage(language: UiLanguage): void
   writeTerminal(terminalId: number, data: string): void
   resizeTerminal(terminalId: number, columns: number, rows: number): void
   onTerminalData(listener: (event: TerminalData) => void): () => void
