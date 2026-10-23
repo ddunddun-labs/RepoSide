@@ -403,10 +403,6 @@ async function callDesktopBridge(operation: 'inspect' | 'apply', repositoryName:
       selectedFiles: expectedSelection.selectedFiles ?? [],
       partialFiles: expectedSelection.partialFiles ?? [],
       commitFileCount: expectedSelection.commitFileCount ?? null,
-      selectedViewFileCount: expectedSelection.selectedViewFileCount ?? 0,
-      visibleFilePath: expectedSelection.visibleFilePath ?? '',
-      lineCheckboxCount: expectedSelection.lineCheckboxCount ?? 0,
-      checkedLineCheckboxCount: expectedSelection.checkedLineCheckboxCount ?? 0,
     }), 'utf8').toString('base64'),
   )
   let result: { stdout: string; stderr: string }
@@ -550,6 +546,7 @@ function registerIpcHandlers() {
         input: { success: false, message: 'AI 생성 중 RepoSide의 저장소가 바뀌었어. 생성 결과를 아래에 보관했고 입력은 건너뛰었어.' },
       }
     }
+    let verifiedDesktop: DesktopCommitSnapshot | undefined
     try {
       const currentDesktop = await callDesktopBridge('inspect', repository.name)
       const currentScope = await readCommitScope(repository, currentDesktop)
@@ -571,6 +568,7 @@ function registerIpcHandlers() {
           input: { success: false, message: 'AI 생성 중 GitHub Desktop 입력창에 내용이 생겼어. 생성 결과를 아래에 보관했고 덮어쓰지 않았어.' },
         }
       }
+      verifiedDesktop = currentDesktop
     } catch (error) {
       return {
         draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length, scope: scope.selectionMode,
@@ -580,7 +578,7 @@ function registerIpcHandlers() {
 
     let inputResult: { success: boolean; message: string }
     try {
-      inputResult = await callDesktopBridge('apply', repository.name, draft, desktop)
+      inputResult = await callDesktopBridge('apply', repository.name, draft, verifiedDesktop)
     } catch (error) {
       inputResult = { success: false, message: error instanceof Error ? error.message : 'GitHub Desktop 입력에 실패했어.' }
     }

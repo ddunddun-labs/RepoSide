@@ -47,11 +47,8 @@ export function resolveDesktopCommitScope(input: DesktopCommitScopeInput) {
   ))) {
     throw new Error('GitHub Desktop에서 안전한 상대 파일 경로를 확인하지 못했어.')
   }
-  if (relativePaths.length === 1 && (
-    desktop.selectedViewFileCount !== 1 || desktop.visibleFilePath?.replaceAll('\\', '/') !== relativePaths[0]
-  )) {
-    throw new Error('체크된 커밋 파일과 현재 diff 파일이 달라. GitHub Desktop에서 파일 하나를 선택해 범위를 확인해줘.')
-  }
+  const previewPath = desktop.visibleFilePath?.replaceAll('\\', '/')
+  const previewIsInCommitScope = Boolean(previewPath && relativePaths.includes(previewPath))
 
   const normalizedRoot = input.actualRoot.trim()
   const rootMatches = input.windows
@@ -74,10 +71,10 @@ export function resolveDesktopCommitScope(input: DesktopCommitScopeInput) {
   const totalChangedLines = addedText === '-' || deletedText === '-'
     ? 0
     : Number(addedText || 0) + Number(deletedText || 0)
-  if (relativePaths.length === 1 && totalChangedLines > 0 && desktop.lineCheckboxCount !== totalChangedLines) {
+  if (relativePaths.length === 1 && previewIsInCommitScope && totalChangedLines > 0 && desktop.lineCheckboxCount !== totalChangedLines) {
     throw new Error(`선택 파일의 변경 라인 ${totalChangedLines}개 중 ${desktop.lineCheckboxCount ?? 0}개만 GitHub Desktop에서 확인돼. 부분 선택 여부를 확정할 수 없어 메시지를 만들지 않았어.`)
   }
-  if ((desktop.checkedLineCheckboxCount ?? 0) !== (desktop.lineCheckboxCount ?? -1)) {
+  if (previewIsInCommitScope && (desktop.checkedLineCheckboxCount ?? 0) !== (desktop.lineCheckboxCount ?? -1)) {
     throw new Error('GitHub Desktop에서 일부 변경 라인만 선택된 것으로 보여. 선택한 부분 diff를 안전하게 재구성할 수 없어 생성을 중단했어.')
   }
 
@@ -88,9 +85,7 @@ export function resolveDesktopCommitScope(input: DesktopCommitScopeInput) {
     selectionMode: 'github-desktop-selection' as const,
     fingerprint: hashCommitState([
       input.repositoryId.toString(), input.expectedRoot, input.branch, input.status, input.diff,
-      JSON.stringify(changedFiles), desktop.visibleFilePath ?? '',
-      JSON.stringify(desktop.partialFiles ?? []), String(desktop.commitFileCount),
-      String(desktop.lineCheckboxCount), String(desktop.checkedLineCheckboxCount),
+      JSON.stringify(changedFiles), JSON.stringify(desktop.partialFiles ?? []), String(desktop.commitFileCount),
     ]),
   }
 }

@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory = $true)][ValidateSet('inspect', 'apply')][string]$Operation,
   [string]$RepositoryName,
   [string]$SummaryBase64,
@@ -14,6 +14,22 @@ Add-Type -AssemblyName UIAutomationTypes
 function Write-Result($value) {
   $json = $value | ConvertTo-Json -Compress
   [Console]::WriteLine([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json)))
+}
+
+function Get-CanonicalPathSignature($paths) {
+  $normalized = @($paths | ForEach-Object { ([string]$_).Replace('\', '/').ToUpperInvariant() })
+  [Array]::Sort($normalized, [System.StringComparer]::Ordinal)
+  return [string]::Join([char]0, $normalized)
+}
+
+function Test-CommitSelectionMatches($expected, $current) {
+  $expectedCount = if ($null -eq $expected.commitFileCount) { -1L } else { [long]$expected.commitFileCount }
+  $currentCount = if ($null -eq $current.commitFileCount) { -1L } else { [long]$current.commitFileCount }
+  return (
+    $expectedCount -eq $currentCount -and
+    (Get-CanonicalPathSignature $expected.selectedFiles) -ceq (Get-CanonicalPathSignature $current.selectedFiles) -and
+    (Get-CanonicalPathSignature $expected.partialFiles) -ceq (Get-CanonicalPathSignature $current.partialFiles)
+  )
 }
 
 function Get-CurrentDesktop {
@@ -128,9 +144,11 @@ function Get-CurrentDesktop {
   }
 
   $visibleFilePath = if ($selectedViewFiles.Count -eq 1) { $selectedViewFiles[0] } else { '' }
+  $commitButton = if ($commitButtons.Count -eq 1) { $commitButtons[0] } else { $null }
 
   return @{
     name = $name
+    commitButton = $commitButton
     summaryEdit = $summaryEdit
     descriptionEdit = $descriptionEdit
     selectedFiles = @($selectedFiles | Sort-Object -Unique)
@@ -179,25 +197,7 @@ try {
 
   if (-not $ExpectedSelectionBase64) { throw '입력 전에 GitHub Desktop 선택 범위를 다시 확인하지 못했어.' }
   $expectedSelection = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ExpectedSelectionBase64)) | ConvertFrom-Json
-  $currentSelection = [ordered]@{
-    selectedFiles = @($desktop.selectedFiles | Sort-Object)
-    partialFiles = @($desktop.partialFiles | Sort-Object)
-    commitFileCount = $desktop.commitFileCount
-    selectedViewFileCount = $desktop.selectedViewFileCount
-    visibleFilePath = $desktop.visibleFilePath
-    lineCheckboxCount = $desktop.lineCheckboxCount
-    checkedLineCheckboxCount = $desktop.checkedLineCheckboxCount
-  } | ConvertTo-Json -Compress -Depth 5
-  $expectedSelectionJson = [ordered]@{
-    selectedFiles = @($expectedSelection.selectedFiles | Sort-Object)
-    partialFiles = @($expectedSelection.partialFiles | Sort-Object)
-    commitFileCount = $expectedSelection.commitFileCount
-    selectedViewFileCount = $expectedSelection.selectedViewFileCount
-    visibleFilePath = $expectedSelection.visibleFilePath
-    lineCheckboxCount = $expectedSelection.lineCheckboxCount
-    checkedLineCheckboxCount = $expectedSelection.checkedLineCheckboxCount
-  } | ConvertTo-Json -Compress -Depth 5
-  if ($currentSelection -cne $expectedSelectionJson) {
+  if (-not (Test-CommitSelectionMatches $expectedSelection $desktop)) {
     throw 'GitHub Desktop의 저장소 파일 또는 라인 선택이 생성 중 바뀌었어. 덮어쓰지 않았고 결과는 RepoSide에 보관했어.'
   }
 
@@ -213,12 +213,20 @@ try {
   $descriptionPattern = $desktop.descriptionEdit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
   $summaryPattern.SetValue($Summary)
   $descriptionPattern.SetValue($Description)
-  if ((Get-Value $desktop.summaryEdit) -cne $Summary -or
-      (Get-Value $desktop.descriptionEdit) -cne $Description) {
-    throw '입력 후 GitHub Desktop에서 메시지 내용을 확인하지 못했어. 생성 결과는 RepoSide에 남아 있어.'
+  if (-not $desktop.commitButton) { throw '커밋 입력 후 상태를 확인할 포커스 대상을 찾지 못했어. 성공으로 표시하지 않았어.' }
+  $desktop.commitButton.SetFocus()
+  Start-Sleep -Milliseconds 200
+  $verifiedDesktop = Get-CurrentDesktop
+  if ($verifiedDesktop.name -cne $desktop.name -or
+      -not (Test-CommitSelectionMatches $expectedSelection $verifiedDesktop)) {
+    throw '입력 확인 중 GitHub Desktop 저장소 또는 커밋 대상 파일이 바뀌었어. 메시지는 유지했으며 성공으로 표시하지 않았어.'
+  }
+  if ((Get-Value $verifiedDesktop.summaryEdit) -cne $Summary -or
+      (Get-Value $verifiedDesktop.descriptionEdit) -cne $Description) {
+    throw '포커스를 이동한 뒤 GitHub Desktop 입력 내용이 유지되지 않았어. Gemini 결과는 RepoSide에 남아 있어.'
   }
 
-  Write-Result @{ success = $true; repositoryName = $desktop.name; message = '커밋 제목과 본문을 GitHub Desktop 입력창에서 확인했어.' }
+  Write-Result @{ success = $true; repositoryName = $desktop.name; message = 'GitHub Desktop에서 포커스를 이동한 뒤 제목과 본문이 유지되는 것을 확인했어.' }
 } catch {
   Write-Result @{ success = $false; message = $_.Exception.Message }
   exit 2

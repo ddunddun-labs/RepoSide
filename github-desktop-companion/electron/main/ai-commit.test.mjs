@@ -140,6 +140,19 @@ test('accepts only the complete GitHub Desktop selection and binds its fingerpri
   assert.equal(scope.selectionMode, 'github-desktop-selection')
   assert.notEqual(scope.fingerprint, resolveDesktopCommitScope(validScopeInput({ branch: 'feature\n' })).fingerprint)
   assert.notEqual(scope.fingerprint, resolveDesktopCommitScope(validScopeInput({ diff: 'different diff' })).fingerprint)
+  assert.equal(scope.fingerprint, resolveDesktopCommitScope(validScopeInput({ desktop: {
+    ...validScopeInput().desktop,
+    selectedViewFileCount: 2,
+    visibleFilePath: 'src/unrelated-preview.ts',
+    lineCheckboxCount: 7,
+    checkedLineCheckboxCount: 0,
+  } })).fingerprint)
+  assert.doesNotThrow(() => resolveDesktopCommitScope(validScopeInput({ desktop: {
+    ...validScopeInput().desktop,
+    visibleFilePath: 'src/unrelated-preview.ts',
+    lineCheckboxCount: 7,
+    checkedLineCheckboxCount: 0,
+  } })))
   assert.notEqual(scope.fingerprint, resolveDesktopCommitScope(validScopeInput({ desktop: {
     ...validScopeInput().desktop, selectedFiles: ['other.ts'], visibleFilePath: 'other.ts',
   } })).fingerprint)

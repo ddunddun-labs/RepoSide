@@ -141,8 +141,8 @@ export function App() {
       const result = await window.companion.generateAiCommit()
       setAiResult(result)
       setAiStatus(result.input.success
-        ? { kind: 'success', message: `${result.stagedFileCount}개 선택 파일(${result.changedFiles.join(', ')})을 바탕으로 작성했고 GitHub Desktop 입력창에서 확인했어.` }
-        : { kind: 'error', message: result.input.message })
+        ? { kind: 'success', message: `Gemini가 ${result.stagedFileCount}개 선택 파일을 바탕으로 생성했고 GitHub Desktop 입력 후 유지까지 확인했어.` }
+        : { kind: 'error', message: `Gemini 생성은 완료했지만 GitHub Desktop 입력은 확인되지 않았어. ${result.input.message}` })
     } catch (error) {
       setAiStatus({ kind: 'error', message: error instanceof Error ? error.message : 'AI 커밋 메시지를 생성하지 못했어.' })
     } finally {
