@@ -1,7 +1,8 @@
-import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, safeStorage, shell } from 'electron'
 import { watch, type FSWatcher } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
-import { spawn } from 'node:child_process'
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { execFile, spawn } from 'node:child_process'
+import { promisify } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -13,7 +14,15 @@ import {
   getRepositoryName,
   inspectIndexedDbRepositories,
 } from './detector/indexeddb-inspector.mjs'
-import type { DetectorState, FileEntry, RepositoryState } from '../../src/shared/types'
+import type { AiCommitDraft, AiCommitSettings, DetectorState, FileEntry, RepositoryState } from '../../src/shared/types'
+import {
+  defaultAiInstruction,
+  defaultGeminiModel,
+  hashCommitState,
+  maximumDiffBytes,
+  requestCommitDraft,
+  requestGeminiModels,
+} from './ai-commit'
 import { TerminalManager } from './terminal-manager'
 import { GitHubDesktopUiWatcher, type UiWatcherEvent } from './github-desktop-ui-watcher'
 import {
@@ -39,6 +48,7 @@ let repositoryWatcher: FSWatcher | undefined
 let repositoryWatcherPath = ''
 let fileChangeTimer: NodeJS.Timeout | undefined
 let repositoryWatcherRetryTimer: NodeJS.Timeout | undefined
+const execFileAsync = promisify(execFile)
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(windowsAppId)
@@ -256,8 +266,355 @@ function resolveRepositoryPath(relativePath = '') {
   return target
 }
 
+interface StoredAiCommitSettings {
+  encryptedApiKey?: string
+  model?: string
+  instruction?: string
+}
+
+function aiCommitSettingsPath() {
+  return path.join(app.getPath('userData'), 'ai-commit-settings.json')
+}
+
+function canStoreApiKeySecurely() {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  if (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text') return false
+  return true
+}
+
+async function readAiCommitSettings(): Promise<StoredAiCommitSettings> {
+  try {
+    return JSON.parse(await readFile(aiCommitSettingsPath(), 'utf8')) as StoredAiCommitSettings
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
+    throw new Error('AI Commit 설정을 읽지 못했어.')
+  }
+}
+
+async function readGeminiApiKey() {
+  const settings = await readAiCommitSettings()
+  if (!settings.encryptedApiKey) return ''
+  if (!canStoreApiKeySecurely()) throw new Error('운영체제 보안 저장소를 사용할 수 없어 API 키를 읽지 않았어.')
+  try {
+    return safeStorage.decryptString(Buffer.from(settings.encryptedApiKey, 'base64'))
+  } catch {
+    throw new Error('저장된 Gemini API 키를 복호화하지 못했어. 설정에서 다시 입력해줘.')
+  }
+}
+
+async function getPublicAiCommitSettings(): Promise<AiCommitSettings> {
+  const settings = await readAiCommitSettings()
+  return {
+    configured: Boolean(settings.encryptedApiKey),
+    model: settings.model || defaultGeminiModel,
+    instruction: settings.instruction || defaultAiInstruction,
+  }
+}
+
+async function runGit(repository: RepositoryState, args: string[]) {
+  const cwd = toHostFileSystemPath(repository.path)
+  const { stdout } = await execFileAsync('git', ['-C', cwd, ...args], {
+    encoding: 'utf8',
+    maxBuffer: maximumDiffBytes * 4,
+    windowsHide: true,
+  })
+  return stdout
+}
+
+interface DesktopCommitSnapshot {
+  success: boolean
+  message: string
+  repositoryName?: string
+  summaryEmpty?: boolean
+  descriptionEmpty?: boolean
+  selectedFiles?: string[]
+  partialFiles?: string[]
+  selectedViewFileCount?: number
+  visibleFilePath?: string
+  lineCheckboxCount?: number
+  checkedLineCheckboxCount?: number
+}
+
+async function readCommitScope(repository: RepositoryState, desktop: DesktopCommitSnapshot) {
+  const changedFiles = desktop.selectedFiles ?? []
+  if (changedFiles.length === 0) {
+    throw new Error('GitHub Desktop에 커밋 대상으로 체크된 파일이 없어. 선택 상태를 확인해줘.')
+  }
+  if ((desktop.partialFiles ?? []).length > 0) {
+    throw new Error(`GitHub Desktop에서 일부 라인만 선택한 파일이 있어 (${(desktop.partialFiles ?? []).join(', ')}). 선택한 부분 diff를 확정할 수 없어 메시지 생성을 중단했어.`)
+  }
+  const relativePaths = changedFiles.map(file => file.replaceAll('\\', '/'))
+  if (relativePaths.some(relativePath => !relativePath || relativePath.startsWith('/') || /^[A-Za-z]:/.test(relativePath) || relativePath.split('/').includes('..'))) {
+    throw new Error('GitHub Desktop에서 안전한 상대 파일 경로를 확인하지 못했어.')
+  }
+  if (relativePaths.length === 1 && (
+    desktop.selectedViewFileCount !== 1 || desktop.visibleFilePath?.replaceAll('\\', '/') !== relativePaths[0]
+  )) {
+    throw new Error('체크된 커밋 파일과 현재 diff 파일이 달라. GitHub Desktop에서 파일 하나를 선택해 범위를 확인해줘.')
+  }
+
+  const [root, branch, status, diff, numstat] = await Promise.all([
+    runGit(repository, ['rev-parse', '--show-toplevel']),
+    runGit(repository, ['branch', '--show-current']),
+    runGit(repository, ['status', '--porcelain=v1', '-z']),
+    runGit(repository, ['diff', 'HEAD', '--binary', '--no-ext-diff', '--no-textconv', '--no-renames', '--', ...relativePaths]),
+    runGit(repository, ['diff', 'HEAD', '--numstat', '--no-renames', '--', ...relativePaths]),
+  ])
+  const normalizedRoot = path.resolve(root.trim())
+  const expectedRoot = path.resolve(toHostFileSystemPath(repository.path))
+  if (process.platform === 'win32'
+    ? normalizedRoot.toLocaleLowerCase() !== expectedRoot.toLocaleLowerCase()
+    : normalizedRoot !== expectedRoot) {
+    throw new Error('Git 저장소 경로가 GitHub Desktop에서 선택한 저장소와 일치하지 않아.')
+  }
+  if (!branch.trim()) throw new Error('브랜치 정보를 확인할 수 없어 커밋 메시지를 만들지 않았어.')
+  if (status.split('\0').some(entry => entry.startsWith('??') && relativePaths.includes(entry.slice(3).replaceAll('\\', '/')))) {
+    throw new Error('선택 범위에 아직 추적되지 않는 새 파일이 포함돼 있어. 새 파일의 정확한 커밋 diff를 확인할 수 없어 생성을 중단했어.')
+  }
+  if (!diff.trim()) {
+    throw new Error('선택한 파일에서 커밋할 변경을 확인하지 못했어. 전체 변경 사항을 대신 보내지 않았어.')
+  }
+  if (Buffer.byteLength(diff, 'utf8') > maximumDiffBytes) {
+    throw new Error('커밋 대상 diff가 256KB를 넘어 Gemini에 보내지 않았어.')
+  }
+  const [addedText, deletedText] = (numstat.trim().split('\t').slice(0, 2))
+  const totalChangedLines = addedText === '-' || deletedText === '-'
+    ? 0
+    : Number(addedText || 0) + Number(deletedText || 0)
+  if (relativePaths.length === 1 && totalChangedLines > 0 && desktop.lineCheckboxCount !== totalChangedLines) {
+    throw new Error(`선택 파일의 변경 라인 ${totalChangedLines}개 중 ${desktop.lineCheckboxCount ?? 0}개만 GitHub Desktop에서 확인돼. 부분 선택 여부를 확정할 수 없어 메시지를 만들지 않았어.`)
+  }
+  if (relativePaths.length === 1 && (desktop.checkedLineCheckboxCount ?? 0) !== (desktop.lineCheckboxCount ?? -1)) {
+    throw new Error('GitHub Desktop에서 일부 변경 라인만 선택된 것으로 보여. 선택한 부분 diff를 안전하게 재구성할 수 없어 생성을 중단했어.')
+  }
+  return {
+    branch: branch.trim(),
+    diff,
+    changedFiles,
+    selectionMode: 'github-desktop-selection' as const,
+    fingerprint: hashCommitState([
+      repository.id.toString(), expectedRoot, branch, status, diff,
+      JSON.stringify(changedFiles), desktop.visibleFilePath ?? '',
+      JSON.stringify(desktop.partialFiles ?? []),
+      String(desktop.lineCheckboxCount), String(desktop.checkedLineCheckboxCount),
+    ]),
+  }
+}
+
+async function readGitIndexFallbackScope(repository: RepositoryState) {
+  const [root, branch, status, diff, changedFiles] = await Promise.all([
+    runGit(repository, ['rev-parse', '--show-toplevel']),
+    runGit(repository, ['branch', '--show-current']),
+    runGit(repository, ['status', '--porcelain=v1', '-z']),
+    runGit(repository, ['diff', '--cached', '--binary', '--no-ext-diff', '--no-textconv', '--no-renames']),
+    runGit(repository, ['diff', '--cached', '--name-only', '-z', '--no-renames']),
+  ])
+  const expectedRoot = path.resolve(toHostFileSystemPath(repository.path))
+  const normalizedRoot = path.resolve(root.trim())
+  if (process.platform === 'win32'
+    ? normalizedRoot.toLocaleLowerCase() !== expectedRoot.toLocaleLowerCase()
+    : normalizedRoot !== expectedRoot) {
+    throw new Error('Git index 저장소 경로가 GitHub Desktop에서 선택한 저장소와 일치하지 않아.')
+  }
+  if (!branch.trim()) throw new Error('브랜치 정보를 확인할 수 없어 커밋 메시지를 만들지 않았어.')
+  if (!diff.trim()) {
+    throw new Error('GitHub Desktop 선택 범위를 읽지 못했고 Git index에도 staged 변경이 없어. 전체 작업 파일을 대신 분석하지 않았어.')
+  }
+  if (Buffer.byteLength(diff, 'utf8') > maximumDiffBytes) throw new Error('Git index diff가 256KB를 넘어 Gemini에 보내지 않았어.')
+  const files = changedFiles.split('\0').filter(Boolean)
+  return {
+    branch: branch.trim(),
+    diff,
+    changedFiles: files,
+    selectionMode: 'git-index-fallback' as const,
+    fingerprint: hashCommitState([repository.id.toString(), expectedRoot, branch, status, diff]),
+  }
+}
+
+async function callDesktopBridge(operation: 'inspect' | 'apply', repositoryName: string, draft?: AiCommitDraft) {
+  const scriptPath = getRuntimeScriptPath('github-desktop-commit-bridge.ps1')
+  let command = 'powershell.exe'
+  let resolvedScriptPath = scriptPath
+  if (process.platform !== 'win32') {
+    if (!process.env.WSL_DISTRO_NAME) throw new Error('GitHub Desktop 입력 연동은 Windows에서만 사용할 수 있어.')
+    const { stdout } = await execFileAsync('wslpath', ['-w', scriptPath], { encoding: 'utf8', windowsHide: true })
+    resolvedScriptPath = stdout.trim()
+  }
+  const args = [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', resolvedScriptPath, '-Operation', operation, '-RepositoryName', repositoryName,
+  ]
+  if (draft) args.push(
+    '-SummaryBase64', Buffer.from(draft.summary, 'utf8').toString('base64'),
+    '-DescriptionBase64', Buffer.from(draft.description, 'utf8').toString('base64'),
+  )
+  let result: { stdout: string; stderr: string }
+  const parseBridgeOutput = (output: string) => JSON.parse(
+    Buffer.from(output.trim(), 'base64').toString('utf8')
+  ) as DesktopCommitSnapshot
+  try {
+    result = await execFileAsync(command, args, {
+      encoding: 'utf8',
+      timeout: 20_000,
+      maxBuffer: 64 * 1024,
+      windowsHide: true,
+    })
+  } catch (error) {
+    const output = (error as NodeJS.ErrnoException & { stdout?: string }).stdout
+    if (output) {
+      try { return parseBridgeOutput(output) } catch { /* use safe generic message below */ }
+    }
+    throw new Error('GitHub Desktop 상태를 확인하거나 입력하지 못했어. 앱이 실행 중인지 확인해줘.')
+  }
+  try {
+    return parseBridgeOutput(result.stdout)
+  } catch {
+    throw new Error('GitHub Desktop 접근성 결과를 읽지 못했어. 접근성 창으로 실행한 뒤 다시 시도해줘.')
+  }
+}
+
 function registerIpcHandlers() {
   ipcMain.handle('detector:get-state', () => detectorState)
+  ipcMain.handle('ai-commit:get-settings', getPublicAiCommitSettings)
+  ipcMain.handle('ai-commit:save-settings', async (
+    _event,
+    input: { apiKey?: string; model: string; instruction: string }
+  ) => {
+    const current = await readAiCommitSettings()
+    const next: StoredAiCommitSettings = {
+      ...current,
+      model: typeof input.model === 'string' && input.model.trim()
+        ? input.model.trim().slice(0, 120)
+        : defaultGeminiModel,
+      instruction: typeof input.instruction === 'string'
+        ? input.instruction.trim().slice(0, 8000) || defaultAiInstruction
+        : defaultAiInstruction,
+    }
+    if (typeof input.apiKey === 'string' && input.apiKey.trim()) {
+      if (!canStoreApiKeySecurely()) throw new Error('운영체제 보안 저장소를 사용할 수 없어 API 키를 저장하지 않았어.')
+      next.encryptedApiKey = safeStorage.encryptString(input.apiKey.trim()).toString('base64')
+    }
+    await writeFile(aiCommitSettingsPath(), JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 })
+    return getPublicAiCommitSettings()
+  })
+  ipcMain.handle('ai-commit:list-models', async () => {
+    const apiKey = await readGeminiApiKey()
+    if (!apiKey) throw new Error('먼저 Gemini API 키를 설정하고 저장해줘.')
+    return requestGeminiModels(apiKey)
+  })
+  ipcMain.handle('ai-commit:generate', async () => {
+    const repository = activeRepository
+    if (!repository || detectorState.status !== 'linked') throw new Error('GitHub Desktop에서 선택된 저장소를 아직 확인하지 못했어.')
+    const settings = await readAiCommitSettings()
+    if (!settings.encryptedApiKey) throw new Error('먼저 AI Commit 설정에서 Gemini API 키를 저장해줘.')
+    const apiKey = await readGeminiApiKey()
+    let desktop: DesktopCommitSnapshot | undefined
+    let scope: Awaited<ReturnType<typeof readCommitScope>> | Awaited<ReturnType<typeof readGitIndexFallbackScope>>
+    let desktopUnavailableMessage = ''
+    try {
+      desktop = await callDesktopBridge('inspect', repository.name)
+      if (desktop.success && desktop.repositoryName !== repository.name) {
+        throw new Error('GitHub Desktop과 RepoSide의 저장소가 달라. 다시 선택한 뒤 시도해줘.')
+      }
+      if (desktop.success) scope = await readCommitScope(repository, desktop)
+      else {
+        desktopUnavailableMessage = desktop.message
+        scope = await readGitIndexFallbackScope(repository)
+      }
+    } catch (error) {
+      if (desktop?.success) throw error
+      desktopUnavailableMessage = error instanceof Error ? error.message : 'GitHub Desktop 창을 확인하지 못했어.'
+      scope = await readGitIndexFallbackScope(repository)
+    }
+    if (desktop?.success && (!desktop.summaryEmpty || !desktop.descriptionEmpty)) {
+      throw new Error('GitHub Desktop 커밋 입력창에 기존 메시지가 있어. 덮어쓰지 않도록 생성을 중단했어.')
+    }
+
+    const draft = await requestCommitDraft(
+      apiKey,
+      settings.model || defaultGeminiModel,
+      settings.instruction || defaultAiInstruction,
+      repository.name,
+      scope.branch,
+      scope.diff,
+    )
+    if (scope.selectionMode === 'git-index-fallback') {
+      const currentRepository = activeRepository
+      if (!currentRepository || currentRepository.id !== repository.id || currentRepository.path !== repository.path) {
+        return {
+          draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length,
+          scope: scope.selectionMode,
+          input: { success: false, message: 'AI 생성 중 RepoSide의 저장소가 바뀌었어. 생성 결과는 보관했어.' },
+        }
+      }
+      try {
+        const currentScope = await readGitIndexFallbackScope(repository)
+        if (currentScope.fingerprint !== scope.fingerprint) {
+          return {
+            draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length,
+            scope: scope.selectionMode,
+            input: { success: false, message: 'AI 생성 중 Git index가 바뀌었어. 생성 결과는 보관했고 입력은 건너뛰었어.' },
+          }
+        }
+      } catch (error) {
+        return {
+          draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length,
+          scope: scope.selectionMode,
+          input: { success: false, message: `${error instanceof Error ? error.message : 'Git index 확인 실패'} 생성 결과는 보관했고 입력은 건너뛰었어.` },
+        }
+      }
+      return {
+        draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length,
+        scope: scope.selectionMode,
+        input: {
+          success: false,
+          message: `GitHub Desktop의 현재 선택 범위를 확인하지 못해 Git index의 staged 변경만 분석했어 (${desktopUnavailableMessage}). 결과를 검토하고 직접 복사해줘.`,
+        },
+      }
+    }
+    const currentRepository = activeRepository
+    if (!currentRepository || currentRepository.id !== repository.id || currentRepository.path !== repository.path) {
+      return {
+        draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length, scope: scope.selectionMode,
+        input: { success: false, message: 'AI 생성 중 RepoSide의 저장소가 바뀌었어. 생성 결과를 아래에 보관했고 입력은 건너뛰었어.' },
+      }
+    }
+    try {
+      const currentDesktop = await callDesktopBridge('inspect', repository.name)
+      const currentScope = await readCommitScope(repository, currentDesktop)
+      if (currentScope.fingerprint !== scope.fingerprint) {
+        return {
+          draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length, scope: scope.selectionMode,
+          input: { success: false, message: 'AI 생성 중 브랜치 또는 선택된 변경 범위가 바뀌었어. 생성 결과를 아래에 보관했고 안전을 위해 입력은 건너뛰었어.' },
+        }
+      }
+      if (!currentDesktop.success || currentDesktop.repositoryName !== repository.name) {
+        return {
+          draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length, scope: scope.selectionMode,
+          input: { success: false, message: currentDesktop.message || 'AI 생성 중 GitHub Desktop 저장소가 바뀌었어. 생성 결과를 아래에 보관했고 입력은 건너뛰었어.' },
+        }
+      }
+      if (!currentDesktop.summaryEmpty || !currentDesktop.descriptionEmpty) {
+        return {
+          draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length, scope: scope.selectionMode,
+          input: { success: false, message: 'AI 생성 중 GitHub Desktop 입력창에 내용이 생겼어. 생성 결과를 아래에 보관했고 덮어쓰지 않았어.' },
+        }
+      }
+    } catch (error) {
+      return {
+        draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length, scope: scope.selectionMode,
+        input: { success: false, message: `${error instanceof Error ? error.message : '상태 확인 실패'} 생성 결과는 아래에 보관했고 입력은 건너뛰었어.` },
+      }
+    }
+
+    let inputResult: { success: boolean; message: string }
+    try {
+      inputResult = await callDesktopBridge('apply', repository.name, draft)
+    } catch (error) {
+      inputResult = { success: false, message: error instanceof Error ? error.message : 'GitHub Desktop 입력에 실패했어.' }
+    }
+    return { draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length, scope: scope.selectionMode, input: inputResult }
+  })
   ipcMain.handle('files:read-directory', async (_event, relativePath: string) => {
     const directory = resolveRepositoryPath(relativePath)
     const entries = await readdir(directory, { withFileTypes: true })

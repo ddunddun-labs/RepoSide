@@ -44,6 +44,30 @@ export interface TerminalData {
   offset: number
 }
 
+export interface AiCommitSettings {
+  configured: boolean
+  model: string
+  instruction: string
+}
+
+export interface AiCommitDraft {
+  summary: string
+  description: string
+}
+
+export interface AiCommitGeneration {
+  draft: AiCommitDraft
+  changedFiles: string[]
+  stagedFileCount: number
+  scope: 'github-desktop-selection' | 'git-index-fallback'
+  input: AiCommitInputResult
+}
+
+export interface AiCommitInputResult {
+  success: boolean
+  message: string
+}
+
 export interface CompanionApi {
   getDetectorState(): Promise<DetectorState>
   onDetectorState(listener: (state: DetectorState) => void): () => void
@@ -61,4 +85,8 @@ export interface CompanionApi {
   readClipboardText(): Promise<string>
   writeClipboardText(text: string): void
   launchGitHubDesktopFast(): Promise<void>
+  getAiCommitSettings(): Promise<AiCommitSettings>
+  saveAiCommitSettings(settings: { apiKey?: string; model: string; instruction: string }): Promise<AiCommitSettings>
+  listGeminiModels(): Promise<string[]>
+  generateAiCommit(): Promise<AiCommitGeneration>
 }

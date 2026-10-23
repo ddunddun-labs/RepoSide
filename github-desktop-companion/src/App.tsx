@@ -3,6 +3,7 @@ import { FileTree } from './components/FileTree'
 import { ExplorerIcon, RefreshIcon } from './components/icons'
 import { TerminalPanel } from './components/TerminalPanel'
 import { useDetector } from './hooks/useDetector'
+import type { AiCommitGeneration, AiCommitSettings } from './shared/types'
 
 const defaultFilesWidth = 340
 const minimumFilesWidth = 240
@@ -40,7 +41,27 @@ export function App() {
   const [autoLaunch, setAutoLaunch] = useState(() => localStorage.getItem('auto-launch-github-desktop') === 'true')
   const [launching, setLaunching] = useState(false)
   const [filesRefreshVersion, setFilesRefreshVersion] = useState(0)
+  const [aiSettings, setAiSettings] = useState<AiCommitSettings | null>(null)
+  const [showAiSettings, setShowAiSettings] = useState(false)
+  const [apiKeyInput, setApiKeyInput] = useState('')
+  const [modelInput, setModelInput] = useState('gemini-flash-lite-latest')
+  const [instructionInput, setInstructionInput] = useState('')
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [settingsBusy, setSettingsBusy] = useState(false)
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiStatus, setAiStatus] = useState<{ kind: 'info' | 'success' | 'error'; message: string } | null>(null)
+  const [aiResult, setAiResult] = useState<AiCommitGeneration | null>(null)
   const workspace = repository ? workspaceStates[repository.id] ?? defaultWorkspace : defaultWorkspace
+
+  useEffect(() => {
+    void window.companion.getAiCommitSettings().then(settings => {
+      setAiSettings(settings)
+      setModelInput(settings.model)
+      setInstructionInput(settings.instruction)
+    }).catch(error => {
+      setAiStatus({ kind: 'error', message: error instanceof Error ? error.message : 'AI Commit 설정을 불러오지 못했어.' })
+    })
+  }, [])
 
   const updateWorkspace = (change: Partial<WorkspaceViewState>) => {
     if (!repository) return
@@ -64,6 +85,68 @@ export function App() {
       await window.companion.launchGitHubDesktopFast()
     } finally {
       setTimeout(() => setLaunching(false), 1500)
+    }
+  }
+
+  const openAiSettings = () => {
+    setAiStatus(null)
+    setShowAiSettings(true)
+  }
+
+  const saveAiSettings = async () => {
+    setSettingsBusy(true)
+    try {
+      const settings = await window.companion.saveAiCommitSettings({
+        apiKey: apiKeyInput,
+        model: modelInput,
+        instruction: instructionInput,
+      })
+      setAiSettings(settings)
+      setApiKeyInput('')
+      setInstructionInput(settings.instruction)
+      setModelInput(settings.model)
+      setAiStatus({ kind: 'success', message: 'AI Commit 설정을 안전하게 저장했어.' })
+      setShowAiSettings(false)
+    } catch (error) {
+      setAiStatus({ kind: 'error', message: error instanceof Error ? error.message : '설정을 저장하지 못했어.' })
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
+  const loadGeminiModels = async () => {
+    setSettingsBusy(true)
+    try {
+      const models = await window.companion.listGeminiModels()
+      setAvailableModels(models)
+      if (!models.includes(modelInput) && models.length > 0) setModelInput(models[0])
+      setAiStatus({ kind: 'success', message: `사용 가능한 Gemini 모델 ${models.length}개를 불러왔어.` })
+    } catch (error) {
+      setAiStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Gemini 모델을 불러오지 못했어.' })
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
+  const generateAiCommit = async () => {
+    if (!aiSettings?.configured) {
+      setAiStatus({ kind: 'info', message: '먼저 Gemini API 키와 모델을 설정해줘.' })
+      setShowAiSettings(true)
+      return
+    }
+    setAiBusy(true)
+    setAiResult(null)
+    setAiStatus({ kind: 'info', message: 'GitHub Desktop에서 선택한 파일 범위를 확인하고 Gemini가 메시지를 작성하고 있어...' })
+    try {
+      const result = await window.companion.generateAiCommit()
+      setAiResult(result)
+      setAiStatus(result.input.success
+        ? { kind: 'success', message: `${result.stagedFileCount}개 선택 파일(${result.changedFiles.join(', ')})을 바탕으로 작성했고 GitHub Desktop 입력창에서 확인했어.` }
+        : { kind: 'error', message: result.input.message })
+    } catch (error) {
+      setAiStatus({ kind: 'error', message: error instanceof Error ? error.message : 'AI 커밋 메시지를 생성하지 못했어.' })
+    } finally {
+      setAiBusy(false)
     }
   }
 
@@ -120,14 +203,64 @@ export function App() {
           {repository?.path ?? detector.message ?? 'GitHub Desktop 연결을 확인하고 있어.'}
         </div>
       </div>
-      <button
-        className="header-action"
-        disabled={!repository}
-        onClick={() => void window.companion.openRepositoryInExplorer()}
-      >
-        <ExplorerIcon /><span>Explorer에서 열기</span>
-      </button>
+      <div className="header-actions">
+        <button className="header-action ai-commit-action" disabled={!repository || aiBusy} onClick={() => void generateAiCommit()}>
+          {aiBusy ? <span className="spinner" /> : <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 9.6 6.4 14.5 8l-4.9 1.6L8 14.5l-1.6-4.9L1.5 8l4.9-1.6L8 1.5Z" /></svg>}
+          <span>{aiBusy ? '메시지 생성 중...' : 'AI Commit'}</span>
+        </button>
+        <button className="header-action ai-settings-action" aria-label="AI Commit 설정" title="AI Commit 설정" onClick={openAiSettings}>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.7 1.5h2.6l.4 1.7 1.3.8 1.7-.5 1.3 2.2-1.2 1.2v1.5l1.2 1.2-1.3 2.2-1.7-.5-1.3.8-.4 1.7H6.7l-.4-1.7-1.3-.8-1.7.5L2 9.6l1.2-1.2V6.9L2 5.7l1.3-2.2 1.7.5 1.3-.8.4-1.7Z" /><circle cx="8" cy="7.7" r="2.1" /></svg>
+          <span>설정</span>
+        </button>
+        <button
+          className="header-action"
+          disabled={!repository}
+          onClick={() => void window.companion.openRepositoryInExplorer()}
+        >
+          <ExplorerIcon /><span>Explorer에서 열기</span>
+        </button>
+      </div>
     </header>
+
+    {aiStatus && <section className={`ai-status ${aiStatus.kind}`} role="status" aria-live="polite">
+      <div className="ai-status-copy"><span className="ai-status-indicator" />{aiStatus.message}</div>
+      {aiResult && <div className="ai-draft">
+        <div><span className="ai-draft-label">Summary</span><strong>{aiResult.draft.summary}</strong></div>
+        {aiResult.draft.description && <div><span className="ai-draft-label">Description</span><p>{aiResult.draft.description}</p></div>}
+        {!aiResult.input.success && <button className="copy-draft-button" onClick={() => {
+          void window.companion.writeClipboardText(`${aiResult.draft.summary}${aiResult.draft.description ? `\n\n${aiResult.draft.description}` : ''}`)
+          setAiStatus({ kind: 'info', message: '생성한 제목과 본문을 클립보드에 복사했어.' })
+        }}>메시지 복사</button>}
+      </div>}
+    </section>}
+
+    {showAiSettings && <div className="settings-backdrop" role="presentation" onKeyDown={event => {
+      if (event.key === 'Escape' && !settingsBusy) setShowAiSettings(false)
+    }} onMouseDown={event => {
+      if (event.target === event.currentTarget && !settingsBusy) setShowAiSettings(false)
+    }}>
+      <section className="ai-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title">
+        <div className="settings-heading"><h2 id="ai-settings-title">AI Commit 설정</h2><button aria-label="설정 닫기" onClick={() => setShowAiSettings(false)}>×</button></div>
+        <label className="settings-field"><span>Gemini API 키</span>
+          <input type="password" autoComplete="new-password" value={apiKeyInput} onChange={event => setApiKeyInput(event.target.value)} placeholder={aiSettings?.configured ? '저장된 키 유지 (변경할 때만 입력)' : 'AIza...'} />
+          <small>기기에 암호화해 저장하고 RepoSide 화면이나 로그에는 표시하지 않아.</small>
+        </label>
+        <label className="settings-field"><span>모델</span>
+          <input list="gemini-model-options" value={modelInput} onChange={event => setModelInput(event.target.value)} placeholder="gemini-flash-lite-latest" />
+          <datalist id="gemini-model-options">{availableModels.map(model => <option value={model} key={model} />)}</datalist>
+        </label>
+        <button className="settings-secondary-button" onClick={() => void loadGeminiModels()} disabled={settingsBusy || !aiSettings?.configured}>
+          {settingsBusy ? '불러오는 중...' : '사용 가능한 모델 불러오기'}
+        </button>
+        <label className="settings-field"><span>사용자 지정 AI 지시사항</span>
+          <textarea rows={6} value={instructionInput} onChange={event => setInstructionInput(event.target.value)} />
+        </label>
+        <div className="settings-footer">
+          <span>{aiSettings?.configured ? 'API 키가 설정되어 있어.' : 'API 키를 저장해야 사용할 수 있어.'}</span>
+          <button className="settings-save-button" onClick={() => void saveAiSettings()} disabled={settingsBusy}>{settingsBusy ? '저장 중...' : '저장'}</button>
+        </div>
+      </section>
+    </div>}
 
     {detector.status === 'error' && <div className="connection-error">{detector.message}</div>}
     {detector.githubDesktopRunning && detector.linkMode === 'delayed' && <div className="connection-notice">

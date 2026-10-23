@@ -45,6 +45,7 @@ When managing multiple repositories in **GitHub Desktop**, constantly opening ne
 - 📂 **Stateful File Tree**: Preserves file expansion, scroll position, and panel width for each individual repository.
 - 💻 **Persistent Terminals**: Multi-tab PTY terminal sessions per repo that keep your commands and outputs intact when switching back and forth.
 - 🚀 **Quick Actions**: One-click file opening, Reveal in File Explorer, and path copying.
+- ✨ **Gemini AI Commit**: Generate a Korean commit title and body from GitHub Desktop's checked changes and fill its commit fields.
 - ⚡ **Zero-Friction Detection**: Uses Windows UI Automation for zero-latency detection, with automatic fallback to Chromium storage inspection.
 - 🐧 **Shell Flexibility**: Built-in support for Windows PowerShell and experimental WSL Linux environments.
 
@@ -65,6 +66,9 @@ Download the latest version from **[GitHub Releases](https://github.com/ddunddun
 1. Launch **RepoSide**.
 2. Click **Launch GitHub Desktop** inside the app to enable zero-latency UI Automation detection.
 3. Switch repositories in GitHub Desktop and watch your workspace follow seamlessly!
+4. Save a Gemini API key and model in **AI Commit Settings**, then click **AI Commit** when files are checked for commit.
+
+The API key is encrypted with the operating system's secure storage. RepoSide refuses to overwrite existing commit text and skips input if the repository or selected changes move during generation. AI Commit only creates and enters a message; it does not change file selections, the Git index, worktree files, commits, or pushes.
 
 ---
 
@@ -110,6 +114,8 @@ The packaged binaries will be output to `github-desktop-companion/release/`.
 
 - **Platform**: Officially supports Windows 10/11 (WSL Linux integration is experimental).
 - **Multiple Identical Repo Names**: If multiple repositories share the exact same base folder name, UI Automation may require fallback verification.
+- **Commit scope fallback**: If GitHub Desktop's selection cannot be read, RepoSide may analyze only the staged Git index diff and will leave the result in RepoSide without entering it. It will not substitute the full worktree.
+- **Partial changes**: Partial line selections and untracked files are skipped when their exact commit diff cannot be verified.
 - **Code Signing**: Binaries are not yet code-signed with an EV certificate.
 
 ---

@@ -99,6 +99,44 @@ button { font: inherit; }
 }
 .header-action:hover:not(:disabled) { background: #292e36; border-color: #8b949e; }
 .header-action:disabled { opacity: .45; cursor: default; }
+.header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.header-action svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ai-commit-action { border-color: rgba(88, 166, 255, .48); color: #dbeafe; background: #17263a; }
+.ai-commit-action:hover:not(:disabled) { border-color: #58a6ff; background: #1b3553; }
+.ai-commit-action svg { fill: #79c0ff; stroke: #79c0ff; }
+.ai-settings-action { padding: 0 9px; }
+.ai-status { max-height: 34vh; padding: 10px 18px; overflow: auto; border-bottom: 1px solid #30363d; background: #111820; font-size: 12px; }
+.ai-status-copy { display: flex; align-items: center; gap: 9px; color: #c9d1d9; }
+.ai-status-indicator { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #58a6ff; }
+.ai-status.info .ai-status-indicator { background: #58a6ff; }
+.ai-status.success .ai-status-indicator { background: #3fb950; }
+.ai-status.error .ai-status-indicator { background: #f85149; }
+.ai-status.success .ai-status-copy { color: #7ee787; }
+.ai-status.error .ai-status-copy { color: #ffb4ae; }
+.ai-draft { max-width: 900px; margin: 10px 0 2px 17px; display: grid; gap: 8px; color: #e6edf3; }
+.ai-draft > div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.ai-draft-label { color: #8b949e; font-size: 11px; font-weight: 650; }
+.ai-draft strong { font-size: 13px; font-weight: 600; }
+.ai-draft p { margin: 0; color: #c9d1d9; line-height: 1.5; white-space: pre-wrap; }
+.copy-draft-button, .settings-secondary-button { justify-self: start; padding: 5px 9px; border: 1px solid #3d444d; border-radius: 5px; color: #c9d1d9; background: #21262d; cursor: pointer; font-size: 12px; }
+.copy-draft-button:hover, .settings-secondary-button:hover:not(:disabled) { border-color: #8b949e; background: #292e36; }
+.settings-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(1, 4, 9, .72); }
+.ai-settings-dialog { width: min(520px, 100%); max-height: min(720px, 100%); padding: 20px; overflow: auto; border: 1px solid #3d444d; border-radius: 9px; background: #161b22; box-shadow: 0 16px 48px rgba(0, 0, 0, .45); }
+.settings-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.settings-heading h2 { margin: 0; color: #f0f6fc; font-size: 17px; font-weight: 650; }
+.settings-heading button { width: 28px; height: 28px; border: 0; border-radius: 5px; color: #8b949e; background: transparent; cursor: pointer; font-size: 21px; }
+.settings-heading button:hover { color: #f0f6fc; background: #30363d; }
+.settings-field { display: grid; gap: 7px; margin: 0 0 14px; color: #c9d1d9; font-size: 12px; font-weight: 600; }
+.settings-field input, .settings-field textarea { width: 100%; padding: 9px 10px; border: 1px solid #3d444d; border-radius: 5px; outline: 0; color: #e6edf3; background: #0d1117; font: inherit; font-weight: 400; }
+.settings-field input:focus, .settings-field textarea:focus { border-color: #58a6ff; box-shadow: 0 0 0 2px rgba(56, 139, 253, .18); }
+.settings-field textarea { resize: vertical; line-height: 1.5; }
+.settings-field small { color: #8b949e; font-size: 11px; font-weight: 400; }
+.settings-secondary-button:disabled { opacity: .5; cursor: default; }
+.settings-footer { margin-top: 18px; padding-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #30363d; color: #8b949e; font-size: 11px; }
+.settings-save-button { padding: 7px 14px; border: 1px solid #2f81f7; border-radius: 5px; color: white; background: #1f6feb; cursor: pointer; font-size: 12px; font-weight: 600; }
+.settings-save-button:hover:not(:disabled) { background: #388bfd; }
+.settings-save-button:disabled { opacity: .55; cursor: default; }
+button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
 
 .connection-error {
   padding: 8px 18px;
@@ -224,4 +262,9 @@ button { font: inherit; }
 @media (max-width: 900px) {
   .app-header { min-height: 76px; padding: 13px 16px; }
   .header-action span { display: none; }
+  .header-action { width: 34px; justify-content: center; padding: 0; }
+  .header-action.ai-commit-action { width: 40px; }
+  .header-action.ai-commit-action span { display: inline; font-size: 0; }
+  .header-actions { gap: 5px; }
+  .ai-draft > div { grid-template-columns: 72px minmax(0, 1fr); }
 }

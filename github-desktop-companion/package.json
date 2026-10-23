@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "test": "node --test electron/main/ai-commit.test.mjs",
     "pack:win": "npm run build && electron-builder --win dir --x64",
     "dist:win": "npm run build && electron-builder --win nsis portable --x64",
     "preview": "electron-vite preview",

@@ -16,6 +16,8 @@ extraResources:
     to: LICENSE.txt
   - from: scripts/watch-github-desktop-repository.ps1
     to: scripts/watch-github-desktop-repository.ps1
+  - from: scripts/github-desktop-commit-bridge.ps1
+    to: scripts/github-desktop-commit-bridge.ps1
 
 asarUnpack:
   - node_modules/node-pty/**/*

@@ -36,6 +36,10 @@ const api: CompanionApi = {
   readClipboardText: () => ipcRenderer.invoke('clipboard:read-text'),
   writeClipboardText: text => ipcRenderer.send('clipboard:write-text', text),
   launchGitHubDesktopFast: () => ipcRenderer.invoke('github-desktop:launch-fast'),
+  getAiCommitSettings: () => ipcRenderer.invoke('ai-commit:get-settings'),
+  saveAiCommitSettings: settings => ipcRenderer.invoke('ai-commit:save-settings', settings),
+  listGeminiModels: () => ipcRenderer.invoke('ai-commit:list-models'),
+  generateAiCommit: () => ipcRenderer.invoke('ai-commit:generate'),
 }
 
 contextBridge.exposeInMainWorld('companion', api)
