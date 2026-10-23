@@ -1,7 +1,6 @@
-# GitHub Desktop Companion app
+# RepoSide desktop app
 
-Electron 기반 Windows 앱의 소스다. 저장소 최상위 [README](../README.md)에서 기능,
-설치 방법, 현재 한계를 확인할 수 있다.
+Electron 기반 Windows 앱의 소스다. 기능과 설치 방법은 저장소 최상위 [영문 README](../README.md)와 [한국어 README](../README.ko.md)를 참고한다. 배포 파일 이름은 `GitHub Desktop Companion` product name을 사용한다.
 
 Repository마다 여러 터미널 탭을 만들 수 있으며 Repository를 전환해도 각 탭의
 프로세스와 출력이 유지된다. Windows에서는 PowerShell, Linux에서는 기본 셸을 사용한다.

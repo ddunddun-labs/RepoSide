@@ -1,11 +1,22 @@
 # Changelog
 
-이 프로젝트의 주요 변경 사항을 기록한다.
-
-형식은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 따르며,
-안정적인 공개 API가 생기기 전까지 버전은 초기 개발 단계로 취급한다.
+This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-10-23
+
+### Added
+
+- Gemini AI Commit message generation from a verifiable GitHub Desktop commit scope, with guarded Summary and Description input.
+- File-tree context menus for opening items, revealing them in Explorer, and copying absolute or relative paths.
+- English-default UI with a persistent Korean language option in Settings.
+- Updated Windows application icon.
+
+### Changed
+
+- Hardened AI Commit scope and target checks to avoid overwriting existing text or entering a message after repository, branch, or selection changes.
+- Report generated messages separately from verified automatic input and preserve the result for copying when input cannot be confirmed.
 
 ## [0.1.2] - 2026-09-01
 
@@ -41,7 +52,8 @@
 - Windows용 설치 프로그램과 포터블 실행 파일
 - README 기능 데모 GIF와 MP4
 
-[Unreleased]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/ddunddun-labs/RepoSide/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ddunddun-labs/RepoSide/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ddunddun-labs/RepoSide/releases/tag/v0.1.0

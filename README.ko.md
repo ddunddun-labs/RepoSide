@@ -17,18 +17,6 @@
 
 ---
 
-<p align="center">
-  <a href="docs/assets/companion-demo.mp4">
-    <img src="docs/assets/companion-demo.gif" alt="RepoSide 데모: GitHub Desktop에서 저장소를 변경하면 컴패니언의 파일 트리와 터미널이 즉시 동기화됨" width="850">
-  </a>
-</p>
-
-<p align="center">
-  <em>위 이미지를 클릭하면 전체 MP4 데모 영상을 확인할 수 있습니다.</em>
-</p>
-
----
-
 ## ⚡ 왜 RepoSide인가요?
 
 **GitHub Desktop**으로 여러 프로젝트를 넘나들며 작업할 때마다 터미널을 새로 열고 `cd`로 디렉터리를 찾아가거나, 복잡한 IDE 창들을 일일이 전환하는 과정은 개발의 몰입을 깨뜨립니다.
@@ -42,11 +30,12 @@
 ## ✨ 주요 기능
 
 - 🔄 **활성 저장소 실시간 감지**: GitHub Desktop의 선택 변경을 딜레이 없이 감지하여 즉각 동기화.
-- 📂 **상태 보존 파일 트리**: 저장소별로 폴더 펼침, 스크롤 위치, 패널 레이아웃 상태를 완벽하게 기억.
-- 💻 **저장소별 독립 터미널**: 각 프로젝트마다 멀티 탭 터미널 세션을 유지하여 다른 저장소로 갔다가 돌아와도 작업 내용 그대로 보존.
-- 🚀 **빠른 파일 제어**: 기본 앱으로 열기, 탐색기에서 보기, 파일 경로 복사 단축 지원.
-- ✨ **Gemini AI Commit**: GitHub Desktop에서 체크된 변경 diff를 바탕으로 한국어 커밋 제목과 본문을 생성해 입력창에 반영.
-- ⚡ **고속 UI Automation 감지**: Windows UI Automation 기반 제로 딜레이 감지 + Chromium 로컬 저장소 폴백 감지 지원.
+- 📂 **상태 보존 파일 트리**: 저장소별 폴더 펼침, 스크롤 위치, 패널 레이아웃을 보존.
+- 💻 **저장소별 독립 터미널**: 저장소마다 터미널 탭과 출력 상태를 유지.
+- 🚀 **파일 작업**: 파일·폴더 우클릭 메뉴에서 열기, 탐색기에서 보기, 절대 경로·상대 경로 복사를 지원.
+- ✨ **Gemini AI Commit**: GitHub Desktop에서 확인 가능한 커밋 범위로 한국어 커밋 제목과 본문을 생성하고 입력을 시도.
+- 🌐 **영어·한국어 UI**: 영어가 기본이며 Settings에서 언제든 한국어로 전환 가능.
+- ⚡ **저장소 감지**: Windows UI Automation을 우선 사용하고 Chromium 로컬 저장소를 폴백으로 확인.
 - 🐧 **다양한 쉘 환경**: Windows PowerShell 기본 지원 및 실험적인 WSL Linux 환경 지원.
 
 ---
@@ -57,25 +46,26 @@
 
 | 배포 형태 | 설명 |
 | :--- | :--- |
-| **`RepoSide-Setup-...exe`** | 사용자 계정에 설치하며 시작 메뉴 및 바탕화면 바로가기를 생성합니다. |
-| **`RepoSide-Portable-...exe`** | 설치 없이 단일 실행 파일로 즉시 실행할 수 있습니다. |
+| **`GitHub Desktop Companion-Setup-0.2.0-x64.exe`** | 사용자 계정에 설치하고 시작 메뉴·바탕화면 바로가기를 생성합니다. |
+| **`GitHub Desktop Companion-Portable-0.2.0-x64.exe`** | 설치 없이 실행하는 포터블 파일입니다. |
+| **`SHA256SUMS.txt`** | Windows 실행 파일의 SHA-256 체크섬입니다. |
 
 > **참고**: 현재 초기 프로토타입 단계로 코드 서명이 적용되지 않아 Windows SmartScreen 경고가 표시될 수 있습니다. 공식 릴리스 페이지의 파일인지 확인하신 후 *추가 정보* → *실행*을 눌러 진행해 주세요.
 
 ### 빠른 시작 가이드
 1. **RepoSide**를 실행합니다.
-2. 화면 상단의 **Launch GitHub Desktop** 버튼을 눌러 접근성 옵션과 함께 GitHub Desktop을 시작합니다.
-3. GitHub Desktop에서 저장소를 변경할 때마다 파일 트리와 터미널이 마법처럼 따라오는 것을 확인하세요!
-4. **AI Commit 설정**에서 Gemini API 키와 모델을 저장한 다음, 체크된 변경 파일이 있을 때 **AI Commit**을 누르세요.
+2. GitHub Desktop을 별도로 실행하고 저장소를 선택합니다. RepoSide가 Windows 접근성 인터페이스와 필요 시 로컬 Chromium 저장소를 통해 선택 저장소를 감지합니다.
+3. 파일 트리에서 파일·폴더를 우클릭해 열기, 탐색기에서 보기, 전체 경로 또는 상대 경로 복사를 선택할 수 있습니다. **Settings**에서 한국어 UI를 선택할 수 있습니다.
+4. **Settings**에서 Gemini API 키와 모델을 저장한 뒤 GitHub Desktop에서 커밋할 변경을 선택하고 **AI Commit**을 누릅니다.
 
-API 키는 운영체제 보안 저장소로 암호화해 로컬에 저장합니다. GitHub Desktop에서 기존 커밋 메시지가 있거나 저장소·변경 선택이 생성 중 바뀌면 입력하지 않습니다. AI Commit은 메시지 생성과 입력만 수행하며 파일 선택, Git index, 작업 파일, 커밋 및 푸시를 변경하지 않습니다.
+API 키는 Electron의 운영체제 기반 보안 저장소로 암호화해 저장합니다. UI 언어와 무관하게 한국어 Conventional Commit 제목·본문을 생성합니다. AI Commit은 메시지 생성과 입력만 수행하며 자동 Stage, Commit, Push를 하지 않습니다. 기존 입력은 덮어쓰지 않습니다. 입력 직전 저장소, 브랜치, 확인 가능한 커밋 범위를 다시 검사합니다. 부분 라인 선택 등 정확한 범위를 검증할 수 없는 경우 전체 작업 파일을 선택한 것처럼 처리하지 않고 안내합니다. 자동 입력을 확인할 수 없으면 생성 결과를 RepoSide에 남겨 복사할 수 있습니다.
 
 ---
 
 ## 🛠 감지 메커니즘
 
-- **빠른 연결 모드 (UI Automation)**: Windows 접근성 트리를 직접 읽어 GitHub Desktop의 저장소 전환 이벤트를 딜레이 없이 즉시 처리합니다.
-- **지연 폴백 모드 (Chromium Storage)**: UI Automation을 사용할 수 없는 경우 GitHub Desktop 내부의 IndexedDB / LocalStorage 상태를 조회하여 동기화합니다.
+- **UI Automation**: 사용 가능한 경우 GitHub Desktop의 Windows 접근성 인터페이스에서 선택 저장소와 커밋 입력란을 확인합니다. GitHub Desktop 내부 데이터를 수정하지 않습니다.
+- **저장소 감지 폴백**: 접근성 정보가 부족하면 로컬 Chromium IndexedDB / LocalStorage를 확인합니다. 저장소 감지와 커밋 범위 확인은 별도 기능이며, 커밋 범위를 확인할 수 없을 때 전체 작업 파일로 대체하지 않습니다.
 
 ---
 
@@ -113,10 +103,10 @@ npm run dist:win
 ## 🗺️ 현재 한계 및 안내 사항
 
 - 공식 지원 운영체제는 Windows 10/11입니다 (WSL Linux 환경은 실험적으로 지원됩니다).
-- 저장소 기본 폴더명이 완전히 동일한 경우 빠른 감지 시 구분이 필요할 수 있습니다.
-- GitHub Desktop의 선택 상태를 읽을 수 없으면 staged된 Git index diff만 대체 분석하고 자동 입력은 건너뜁니다. 해당 diff도 없으면 전체 작업 파일을 대신 분석하지 않습니다.
+- 커밋 범위를 확인할 수 없으면 staged된 Git index diff만 대체 분석할 수 있고 자동 입력을 건너뜁니다. 해당 diff도 없으면 전체 작업 파일을 대신 분석하지 않습니다.
 - 부분 라인 선택 또는 아직 Git이 추적하지 않는 새 파일은 정확한 범위를 확인할 수 없어 AI Commit을 중단합니다.
-- 프로토타입 단계로 EV 코드 서명 및 자동 업데이트는 추후 지원될 예정입니다.
+- AI Commit은 설치된 GitHub Desktop 버전에서 노출하는 Windows UI Automation 컨트롤에 의존합니다. 입력란의 실제 반영 여부를 브리지에서 확인한 경우에만 입력 성공으로 표시하며 버전에 따라 동작이 다를 수 있습니다.
+- 실행 파일은 코드 서명되지 않았습니다.
 
 ---
 
