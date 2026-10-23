@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory = $true)][ValidateSet('inspect', 'apply')][string]$Operation,
   [string]$RepositoryName,
   [string]$SummaryBase64,
-  [string]$DescriptionBase64
+  [string]$DescriptionBase64,
+  [string]$ExpectedSelectionBase64
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,6 +33,11 @@ function Get-CurrentDesktop {
   $repositoryButtons = @($buttons | Where-Object { $_.Current.Name -like 'Current repository *' })
   if ($repositoryButtons.Count -ne 1) { throw 'GitHub Desktop에서 현재 저장소를 확인하지 못했어.' }
   $name = $repositoryButtons[0].Current.Name.Substring('Current repository '.Length)
+  $commitButtons = @($buttons | Where-Object { $_.Current.Name -match '^Commit (\d+) files? to ' })
+  $commitFileCount = $null
+  if ($commitButtons.Count -eq 1 -and $commitButtons[0].Current.Name -match '^Commit (\d+) files? to ') {
+    $commitFileCount = [int]$Matches[1]
+  }
 
   $edits = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
   foreach ($controlType in @(
@@ -129,6 +135,7 @@ function Get-CurrentDesktop {
     descriptionEdit = $descriptionEdit
     selectedFiles = @($selectedFiles | Sort-Object -Unique)
     partialFiles = @($partialFiles | Sort-Object -Unique)
+    commitFileCount = $commitFileCount
     selectedViewFileCount = $selectedViewFiles.Count
     visibleFilePath = $visibleFilePath
     lineCheckboxCount = $lineCheckboxCount
@@ -161,12 +168,37 @@ try {
       descriptionEmpty = [string]::IsNullOrWhiteSpace($descriptionValue)
       selectedFiles = $desktop.selectedFiles
       partialFiles = $desktop.partialFiles
+      commitFileCount = $desktop.commitFileCount
       selectedViewFileCount = $desktop.selectedViewFileCount
       visibleFilePath = $desktop.visibleFilePath
       lineCheckboxCount = $desktop.lineCheckboxCount
       checkedLineCheckboxCount = $desktop.checkedLineCheckboxCount
     }
     exit 0
+  }
+
+  if (-not $ExpectedSelectionBase64) { throw '입력 전에 GitHub Desktop 선택 범위를 다시 확인하지 못했어.' }
+  $expectedSelection = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ExpectedSelectionBase64)) | ConvertFrom-Json
+  $currentSelection = [ordered]@{
+    selectedFiles = @($desktop.selectedFiles | Sort-Object)
+    partialFiles = @($desktop.partialFiles | Sort-Object)
+    commitFileCount = $desktop.commitFileCount
+    selectedViewFileCount = $desktop.selectedViewFileCount
+    visibleFilePath = $desktop.visibleFilePath
+    lineCheckboxCount = $desktop.lineCheckboxCount
+    checkedLineCheckboxCount = $desktop.checkedLineCheckboxCount
+  } | ConvertTo-Json -Compress -Depth 5
+  $expectedSelectionJson = [ordered]@{
+    selectedFiles = @($expectedSelection.selectedFiles | Sort-Object)
+    partialFiles = @($expectedSelection.partialFiles | Sort-Object)
+    commitFileCount = $expectedSelection.commitFileCount
+    selectedViewFileCount = $expectedSelection.selectedViewFileCount
+    visibleFilePath = $expectedSelection.visibleFilePath
+    lineCheckboxCount = $expectedSelection.lineCheckboxCount
+    checkedLineCheckboxCount = $expectedSelection.checkedLineCheckboxCount
+  } | ConvertTo-Json -Compress -Depth 5
+  if ($currentSelection -cne $expectedSelectionJson) {
+    throw 'GitHub Desktop의 저장소 파일 또는 라인 선택이 생성 중 바뀌었어. 덮어쓰지 않았고 결과는 RepoSide에 보관했어.'
   }
 
   $Summary = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($SummaryBase64))

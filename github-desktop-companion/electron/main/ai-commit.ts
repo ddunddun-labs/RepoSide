@@ -73,7 +73,7 @@ export async function requestCommitDraft(
       body: JSON.stringify({
         system_instruction: { parts: [{ text: instruction }] },
         contents: [{ parts: [{ text: [
-          '다음은 Git 커밋에 실제 포함될 staged diff야.',
+          '다음은 현재 커밋 범위로 확인된 Git diff야.',
           `저장소: ${repositoryName}`,
           `브랜치: ${branch}`,
           '제목은 summary, 본문은 description 키를 가진 JSON 객체로 반환해. description은 필요 없으면 빈 문자열로 둬.',
