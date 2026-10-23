@@ -21,7 +21,7 @@
 
 When managing multiple repositories in **GitHub Desktop**, constantly opening new terminals, navigating directories (`cd`), and managing scattered IDE windows breaks your flow.
 
-**RepoSide** sits alongside GitHub Desktop like a faithful co-pilot. Whenever you select a repository in GitHub Desktop, RepoSide instantly switches:
+**RepoSide** sits alongside GitHub Desktop and updates its workspace when it detects a repository selected in GitHub Desktop:
 1. **The project file explorer** (preserving your expanded tree state and scroll position).
 2. **Dedicated terminal sessions** (preserving multiple PTY tabs, shell state, and output history per repository).
 
@@ -29,7 +29,7 @@ When managing multiple repositories in **GitHub Desktop**, constantly opening ne
 
 ## ✨ Key Features
 
-- 🔄 **Active Repo Auto-Sync**: Instantly detects active repository changes in GitHub Desktop.
+- 🔄 **Active Repo Sync**: Detects repository selection changes in GitHub Desktop and updates the companion workspace.
 - 📂 **Stateful File Tree**: Preserves file expansion, scroll position, and panel width for each repository.
 - 💻 **Persistent Terminals**: Keeps repository-specific terminal tabs and output when switching repositories.
 - 🚀 **File Actions**: Open files, reveal files or folders in Explorer, and copy absolute or repository-relative paths from the file tree context menu.
