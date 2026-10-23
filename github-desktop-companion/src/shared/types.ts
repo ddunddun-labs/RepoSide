@@ -71,10 +71,11 @@ export interface AiCommitInputResult {
 export interface CompanionApi {
   getDetectorState(): Promise<DetectorState>
   onDetectorState(listener: (state: DetectorState) => void): () => void
-  readDirectory(relativePath: string): Promise<FileEntry[]>
+  readDirectory(relativePath: string, expectedRepositoryKey?: string): Promise<FileEntry[]>
   onFilesChanged(listener: () => void): () => void
-  openFile(relativePath: string): Promise<string>
-  showInExplorer(relativePath: string): Promise<void>
+  openFile(relativePath: string, expectedRepositoryKey?: string): Promise<string>
+  showInExplorer(relativePath: string, expectedRepositoryKey?: string): Promise<void>
+  copyRepositoryPath(relativePath: string, repositoryKey: string, absolute: boolean): Promise<void>
   openRepositoryInExplorer(): Promise<void>
   attachTerminal(terminalId: number | undefined, columns: number, rows: number): Promise<TerminalAttachment>
   createTerminal(columns: number, rows: number): Promise<TerminalAttachment>

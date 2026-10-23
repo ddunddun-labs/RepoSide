@@ -25,6 +25,7 @@ import {
 } from './ai-commit'
 import { resolveDesktopCommitScope, type DesktopCommitSnapshot } from './commit-scope'
 import { TerminalManager } from './terminal-manager'
+import { assertExpectedRepository, resolveSafeRepositoryPath } from './repository-path'
 import { GitHubDesktopUiWatcher, type UiWatcherEvent } from './github-desktop-ui-watcher'
 import {
   minimumWindowHeight,
@@ -255,16 +256,10 @@ function toHostFileSystemPath(windowsPath: string) {
 }
 
 function resolveRepositoryPath(relativePath = '') {
-  if (!activeRepository) throw new Error('No linked Repository.')
-  if (path.isAbsolute(relativePath)) throw new Error('Absolute paths are not allowed.')
-
-  const root = path.resolve(toHostFileSystemPath(activeRepository.path))
-  const target = path.resolve(root, relativePath)
-  const relation = path.relative(root, target)
-  if (relation.startsWith('..') || path.isAbsolute(relation)) {
-    throw new Error('The requested path is outside the linked Repository.')
-  }
-  return target
+  return resolveSafeRepositoryPath(
+    activeRepository ? toHostFileSystemPath(activeRepository.path) : undefined,
+    relativePath,
+  )
 }
 
 interface StoredAiCommitSettings {
@@ -584,9 +579,13 @@ function registerIpcHandlers() {
     }
     return { draft, changedFiles: scope.changedFiles, stagedFileCount: scope.changedFiles.length, scope: scope.selectionMode, input: inputResult }
   })
-  ipcMain.handle('files:read-directory', async (_event, relativePath: string) => {
+  ipcMain.handle('files:read-directory', async (_event, relativePath: string, repositoryKey?: string) => {
+    assertExpectedRepository(activeRepository ? String(activeRepository.id) : undefined, repositoryKey)
+    const repositoryPath = activeRepository?.path
     const directory = resolveRepositoryPath(relativePath)
     const entries = await readdir(directory, { withFileTypes: true })
+    assertExpectedRepository(activeRepository ? String(activeRepository.id) : undefined, repositoryKey)
+    if (activeRepository?.path !== repositoryPath) throw new Error('저장소가 변경되어 파일 목록을 표시하지 않았어. 다시 시도해줘.')
     return entries
       .filter(entry => !entry.isDirectory() || !ignoredDirectories.has(entry.name))
       .filter(entry => entry.isDirectory() || entry.isFile())
@@ -603,12 +602,22 @@ function registerIpcHandlers() {
         return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
       })
   })
-  ipcMain.handle('files:open', async (_event, relativePath: string) => {
+  ipcMain.handle('files:open', async (_event, relativePath: string, repositoryKey?: string) => {
+    assertExpectedRepository(activeRepository ? String(activeRepository.id) : undefined, repositoryKey)
     const error = await shell.openPath(resolveRepositoryPath(relativePath))
     return error
   })
-  ipcMain.handle('files:show-in-explorer', (_event, relativePath: string) => {
+  ipcMain.handle('files:show-in-explorer', (_event, relativePath: string, repositoryKey?: string) => {
+    assertExpectedRepository(activeRepository ? String(activeRepository.id) : undefined, repositoryKey)
     shell.showItemInFolder(resolveRepositoryPath(relativePath))
+  })
+  ipcMain.handle('files:copy-path', (_event, relativePath: string, repositoryKey: string, absolute: boolean) => {
+    assertExpectedRepository(activeRepository ? String(activeRepository.id) : undefined, repositoryKey)
+    if (typeof relativePath !== 'string' || typeof repositoryKey !== 'string' || typeof absolute !== 'boolean') {
+      throw new Error('잘못된 경로 복사 요청이야.')
+    }
+    const resolvedPath = resolveRepositoryPath(relativePath)
+    clipboard.writeText(absolute ? resolvedPath : relativePath)
   })
   ipcMain.handle('files:open-repository', async () => {
     const error = await shell.openPath(resolveRepositoryPath())

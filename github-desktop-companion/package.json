@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "test": "node --test electron/main/ai-commit.test.mjs",
+    "test": "node --test electron/main/*.test.mjs",
     "test:windows-bridge": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/test-github-desktop-commit-bridge.ps1 -BridgePath scripts/github-desktop-commit-bridge.ps1",
     "pack:win": "npm run build && electron-builder --win dir --x64",
     "dist:win": "npm run build && electron-builder --win nsis portable --x64",

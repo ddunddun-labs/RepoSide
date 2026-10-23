@@ -8,14 +8,18 @@ const api: CompanionApi = {
     ipcRenderer.on('detector:state', handler)
     return () => ipcRenderer.removeListener('detector:state', handler)
   },
-  readDirectory: relativePath => ipcRenderer.invoke('files:read-directory', relativePath),
+  readDirectory: (relativePath, repositoryKey) =>
+    ipcRenderer.invoke('files:read-directory', relativePath, repositoryKey),
   onFilesChanged: listener => {
     const handler = () => listener()
     ipcRenderer.on('files:changed', handler)
     return () => ipcRenderer.removeListener('files:changed', handler)
   },
-  openFile: relativePath => ipcRenderer.invoke('files:open', relativePath),
-  showInExplorer: relativePath => ipcRenderer.invoke('files:show-in-explorer', relativePath),
+  openFile: (relativePath, repositoryKey) => ipcRenderer.invoke('files:open', relativePath, repositoryKey),
+  showInExplorer: (relativePath, repositoryKey) =>
+    ipcRenderer.invoke('files:show-in-explorer', relativePath, repositoryKey),
+  copyRepositoryPath: (relativePath, repositoryKey, absolute) =>
+    ipcRenderer.invoke('files:copy-path', relativePath, repositoryKey, absolute),
   openRepositoryInExplorer: () => ipcRenderer.invoke('files:open-repository'),
   attachTerminal: (terminalId, columns, rows) => {
     return ipcRenderer.invoke('terminal:attach', terminalId, columns, rows)
